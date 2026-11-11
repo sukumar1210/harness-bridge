@@ -72,17 +72,84 @@ uv sync
 
 ## Connecting to Agent Harnesses
 
-### Claude Code Registration
-Register Harness Bridge as a local MCP server in Claude Code:
+Harness Bridge exposes a standard Model Context Protocol (MCP) server over standard I/O (`stdio`). You can register it in any MCP-compliant AI coding harness, IDE, or desktop assistant:
+
+### 1. Claude Code
+Register Harness Bridge directly using the `claude` CLI:
 ```bash
 claude mcp add harness-bridge -- harness-bridge serve
 ```
 
-### Antigravity CLI Registration
-Register Harness Bridge in Antigravity:
+Alternatively, add it directly to your project or user configuration (`~/.claude.json`):
+```json
+{
+  "mcpServers": {
+    "harness-bridge": {
+      "command": "harness-bridge",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+### 2. Antigravity CLI (`agy`)
+Register Harness Bridge using the `agy` CLI:
 ```bash
 agy mcp add harness-bridge harness-bridge serve
 ```
+
+Or configure it in your Antigravity MCP settings (`~/.gemini/antigravity-cli/mcp_config.json`):
+```json
+{
+  "mcpServers": {
+    "harness-bridge": {
+      "command": "harness-bridge",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+### 3. Cursor
+In Cursor:
+1. Navigate to **Cursor Settings** > **Features** > **MCP Servers**.
+2. Click **+ Add New MCP Server**.
+3. Fill in:
+   - **Name**: `harness-bridge`
+   - **Type**: `command`
+   - **Command**: `harness-bridge serve` *(or `~/.local/bin/harness-bridge serve` if not in global PATH)*
+
+### 4. Windsurf (Codeium Cascade)
+Add the server configuration to `~/.codeium/windsurf/mcp_config.json`:
+```json
+{
+  "mcpServers": {
+    "harness-bridge": {
+      "command": "harness-bridge",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+### 5. Claude Desktop
+Add to your `claude_desktop_config.json` (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+```json
+{
+  "mcpServers": {
+    "harness-bridge": {
+      "command": "harness-bridge",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+### 6. Generic MCP Clients / Zed / Goose
+Any client supporting JSON-RPC stdio transport can connect to Harness Bridge:
+* **Executable**: `harness-bridge` (or `$HOME/.local/bin/harness-bridge`)
+* **Arguments**: `["serve"]`
+* **Transport**: `stdio`
 
 ---
 
