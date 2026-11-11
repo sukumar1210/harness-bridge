@@ -42,3 +42,7 @@ echo "=== Harness Bridge installed successfully to ${BIN_DIR}/harness-bridge ===
 if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
     echo "Note: Please ensure ${BIN_DIR} is in your PATH (e.g. export PATH=\"\$HOME/.local/bin:\$PATH\")."
 fi
+echo ""
+echo "Next step: Register Harness Bridge in your installed coding harnesses (Claude Code, Antigravity):"
+echo "    harness-bridge setup"
+echo ""

@@ -68,6 +68,12 @@ cd harness-bridge
 uv sync
 ```
 
+### Next Step: One-Shot Setup
+Once installed, register Harness Bridge with all detected harnesses in one command:
+```bash
+harness-bridge setup
+```
+
 ---
 
 ## Connecting to Agent Harnesses

@@ -36,3 +36,10 @@ $ShimPath = Join-Path $BinDir "harness-bridge.cmd"
 "@echo off`n`"$VenvDir\Scripts\harness-bridge.exe`" %*" | Out-File -FilePath $ShimPath -Encoding ascii
 
 Write-Host "=== Harness Bridge installed successfully to $ShimPath ===" -ForegroundColor Green
+if ($env:PATH -notlike "*$BinDir*") {
+    Write-Host "Note: Please ensure $BinDir is in your PATH." -ForegroundColor Yellow
+}
+Write-Host ""
+Write-Host "Next step: Register Harness Bridge in your installed coding harnesses (Claude Code, Antigravity):" -ForegroundColor Cyan
+Write-Host "    harness-bridge setup" -ForegroundColor White
+Write-Host ""
