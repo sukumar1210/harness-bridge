@@ -83,7 +83,16 @@ class WorkspaceManager:
             )
             if status_out.strip():
                 await run_command_safe(
-                    ["git", "commit", "-m", f"chore: session changes for {session_id}"],
+                    [
+                        "git",
+                        "-c",
+                        "user.name=Harness Bridge",
+                        "-c",
+                        "user.email=bridge@internal",
+                        "commit",
+                        "-m",
+                        f"chore: session changes for {session_id}",
+                    ],
                     cwd=worktree_path,
                 )
 
@@ -120,18 +129,36 @@ class WorkspaceManager:
                 applied_files=[],
             )
 
-        # Checkout branch changes into the repository working copy
-        merge_code, m_out, m_err = await run_command_safe(
-            ["git", "checkout", branch_name, "--", "."],
+        # Handle files deleted in the branch
+        code, deleted_names, _ = await run_command_safe(
+            ["git", "diff", "--diff-filter=D", "--name-only", "HEAD", branch_name],
             cwd=repo_root,
         )
-        if merge_code != 0:
-            return ApplyResult(
-                session_id=session_id,
-                success=False,
-                message=f"Failed to apply changes from {branch_name}:\n{m_err or m_out}",
-                applied_files=[],
+        if code == 0 and deleted_names.strip():
+            for df in [f.strip() for f in deleted_names.splitlines() if f.strip()]:
+                file_to_del = repo_root / df
+                if file_to_del.is_file() or file_to_del.is_symlink():
+                    file_to_del.unlink(missing_ok=True)
+                elif file_to_del.is_dir():
+                    shutil.rmtree(file_to_del, ignore_errors=True)
+
+        # Checkout added/modified files from branch into the repository working copy
+        code, non_deleted_names, _ = await run_command_safe(
+            ["git", "diff", "--diff-filter=d", "--name-only", "HEAD", branch_name],
+            cwd=repo_root,
+        )
+        if code == 0 and non_deleted_names.strip():
+            merge_code, m_out, m_err = await run_command_safe(
+                ["git", "checkout", branch_name, "--", "."],
+                cwd=repo_root,
             )
+            if merge_code != 0:
+                return ApplyResult(
+                    session_id=session_id,
+                    success=False,
+                    message=f"Failed to apply changes from {branch_name}:\n{m_err or m_out}",
+                    applied_files=[],
+                )
 
         return ApplyResult(
             session_id=session_id,

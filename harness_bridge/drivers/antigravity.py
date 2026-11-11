@@ -42,7 +42,7 @@ class AntigravityDriver(BaseDriver):
             "--dangerously-skip-permissions",
         ]
 
-        if task.session_id:
+        if task.session_id and task.is_resume:
             cmd.extend(["--conversation", task.session_id])
 
         start_time = time.perf_counter()

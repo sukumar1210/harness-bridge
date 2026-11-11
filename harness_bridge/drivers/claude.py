@@ -42,7 +42,7 @@ class ClaudeCodeDriver(BaseDriver):
             "--dangerously-skip-permissions",
         ]
 
-        if task.session_id:
+        if task.session_id and task.is_resume:
             # Pass session identifier for conversational continuity
             cmd.extend(["--resume", task.session_id])
 

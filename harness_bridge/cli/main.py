@@ -184,5 +184,43 @@ def test_command() -> None:
     console.print("[bold green]Diagnostics complete.[/bold green]")
 
 
+@app.command(name="setup")
+def setup_command(
+    executable: Optional[str] = typer.Option(
+        None, "--executable", "-e", help="Custom executable command or path for harness-bridge."
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force re-registration even if already configured."
+    ),
+) -> None:
+    """One-shot setup: auto-detect all installed agent harnesses and register Harness Bridge as an MCP server."""
+    from harness_bridge.core.setup import setup_all_harnesses
+
+    console.print(
+        "[bold cyan]Running one-shot setup for installed AI agent harnesses...[/bold cyan]"
+    )
+    results = asyncio.run(setup_all_harnesses(executable=executable, force=force))
+
+    table = Table(title="Harness MCP Setup Status", header_style="bold cyan")
+    table.add_column("Harness", style="bold")
+    table.add_column("Binary")
+    table.add_column("Status")
+    table.add_column("Details")
+
+    for res in results:
+        if res.status == "configured":
+            status_str = "[bold green]✓ Configured[/bold green]"
+        elif res.status == "already_configured":
+            status_str = "[green]✓ Already Registered[/green]"
+        elif res.status == "not_installed":
+            status_str = "[dim yellow]⚠ Not Installed[/dim yellow]"
+        else:
+            status_str = "[bold red]✗ Failed[/bold red]"
+
+        table.add_row(res.harness, res.binary, status_str, res.message)
+
+    console.print(table)
+
+
 if __name__ == "__main__":
     app()

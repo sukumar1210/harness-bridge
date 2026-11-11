@@ -1,0 +1,48 @@
+name: New Harness Driver Request
+description: Request support for a new AI agent CLI harness (e.g., Aider, Codex, Goose, Cursor)
+title: "feat(driver): Add driver for <Harness Name>"
+labels: ["enhancement", "driver"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Requesting support for a new AI harness driver. Please verify that the target harness supports headless/CLI execution.
+  - type: input
+    id: harness_name
+    attributes:
+      label: Harness Name & CLI Binary
+      placeholder: e.g. Aider (`aider`), Codex CLI (`codex`)
+    validations:
+      required: true
+  - type: input
+    id: harness_repo
+    attributes:
+      label: Harness Repository or Website
+      placeholder: e.g. https://github.com/paul-gauthier/aider
+    validations:
+      required: true
+  - type: textarea
+    id: headless_flags
+    attributes:
+      label: Headless & Non-Interactive Execution Flags
+      description: How does this tool accept prompts non-interactively without prompting for user confirmation?
+      placeholder: e.g. `aider --message "<prompt>" --yes --no-git`
+    validations:
+      required: true
+  - type: textarea
+    id: session_resumption
+    attributes:
+      label: Conversational Continuity / Session Resumption
+      description: Does the CLI support resuming past conversations or sessions across turns?
+      placeholder: e.g. `--resume <session_id>` or `--load-session <file>`
+  - type: dropdown
+    id: output_format
+    attributes:
+      label: Output Formatting
+      options:
+        - "JSON (--output-format json or similar)"
+        - "Plain text on stdout"
+        - "Diff output only"
+        - "Unknown / Needs research"
+    validations:
+      required: true

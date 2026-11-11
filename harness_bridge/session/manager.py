@@ -36,7 +36,8 @@ class SessionManager:
                 f"Delegation recursion ceiling reached ({hop_count}/{task.max_hops}). Aborting to prevent infinite loops."
             )
 
-        session_id = task.session_id or str(uuid.uuid4())
+        original_session_id = task.session_id
+        session_id = original_session_id or str(uuid.uuid4())
         task.session_id = session_id
 
         # Determine target repository directory
@@ -50,7 +51,11 @@ class SessionManager:
         )
 
         # Update or create session tracking info
-        if session_id not in self.sessions:
+        if session_id in self.sessions:
+            task.is_resume = True
+            self.sessions[session_id].turn_count += 1
+        else:
+            task.is_resume = original_session_id is not None
             self.sessions[session_id] = SessionInfo(
                 session_id=session_id,
                 harness=task.harness,
@@ -59,8 +64,6 @@ class SessionManager:
                 turn_count=1,
                 created_at=time.time(),
             )
-        else:
-            self.sessions[session_id].turn_count += 1
 
         # Prepare execution environment with distributed trace propagation
         env = dict(os.environ)

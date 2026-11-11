@@ -72,7 +72,21 @@ uv sync
 
 ## Connecting to Agent Harnesses
 
-Harness Bridge exposes a standard Model Context Protocol (MCP) server over standard I/O (`stdio`). You can register it in any MCP-compliant AI coding harness, IDE, or desktop assistant:
+### One-Shot Automatic Setup (Recommended)
+Auto-detect all installed coding harnesses on your system PATH (`claude`, `agy`) and register Harness Bridge as an MCP server with a single command:
+```bash
+harness-bridge setup
+```
+Use `--force` to re-register or update existing configurations:
+```bash
+harness-bridge setup --force
+```
+
+---
+
+### Manual Registration by Harness
+
+Harness Bridge exposes a standard Model Context Protocol (MCP) server over standard I/O (`stdio`). You can also register it manually in any MCP-compliant harness or IDE:
 
 ### 1. Claude Code
 Register Harness Bridge directly using the `claude` CLI:

@@ -70,9 +70,15 @@ async def check_for_updates(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code == 404:
+                cache_data = {
+                    "last_check": now,
+                    "latest_version": __version__,
+                    "wheel_url": None,
+                }
+                CACHE_FILE.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
                 return False, __version__, __version__, None
             resp.raise_for_status()
             data = resp.json()

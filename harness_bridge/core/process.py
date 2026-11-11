@@ -54,6 +54,7 @@ async def run_command_safe(
 ) -> tuple[int, str, str]:
     """Execute a subprocess safely using proc.communicate() to avoid pipe buffer deadlocks."""
     kwargs: dict = {
+        "stdin": asyncio.subprocess.DEVNULL,
         "stdout": asyncio.subprocess.PIPE,
         "stderr": asyncio.subprocess.PIPE,
     }

@@ -48,3 +48,33 @@ async def test_workspace_worktree_isolation_and_diff(temp_git_repo):
         session_id=session_id, worktree_path=ws, repo_root=temp_git_repo, delete_branch=True
     )
     assert not ws.exists()
+
+
+@pytest.mark.asyncio
+async def test_workspace_apply_diff_handles_deleted_files(temp_git_repo):
+    mgr = WorkspaceManager()
+    session_id = "test-session-delete"
+
+    # 1. Prepare worktree
+    ws = await mgr.prepare_workspace(
+        mode="worktree", repo_root=temp_git_repo, session_id=session_id
+    )
+    assert (ws / "README.md").exists()
+
+    # 2. Delete file in worktree
+    (ws / "README.md").unlink()
+
+    # 3. Extract diff
+    diff = await mgr.extract_diff(ws)
+    assert "README.md" in diff
+
+    # 4. Apply diff
+    apply_res = await mgr.apply_diff(repo_root=temp_git_repo, session_id=session_id)
+    assert apply_res.success is True
+    assert not (temp_git_repo / "README.md").exists()
+
+    # 5. Cleanup
+    await mgr.cleanup_workspace(
+        session_id=session_id, worktree_path=ws, repo_root=temp_git_repo, delete_branch=True
+    )
+    assert not ws.exists()

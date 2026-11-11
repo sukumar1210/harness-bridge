@@ -17,6 +17,7 @@ class TaskSpec(BaseModel):
     hop_count: int = 0
     max_hops: int = 10
     repo_root: str | None = None
+    is_resume: bool = False
 
 
 class TaskResult(BaseModel):
