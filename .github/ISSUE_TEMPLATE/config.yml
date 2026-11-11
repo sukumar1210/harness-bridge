@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security Vulnerabilities
+    url: https://github.com/sukumar1210/harness-bridge/security/advisories/new
+    about: Please report security vulnerabilities privately.

@@ -29,7 +29,9 @@ class AntigravityDriver(BaseDriver):
     ) -> TaskResult:
         binary = self.resolve_binary()
         if not binary:
-            raise HarnessNotFoundError(f"Antigravity CLI binary '{self.binary_name}' not found on PATH.")
+            raise HarnessNotFoundError(
+                f"Antigravity CLI binary '{self.binary_name}' not found on PATH."
+            )
 
         cmd = [
             str(binary),

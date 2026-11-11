@@ -1,12 +1,14 @@
 import pytest
-from pathlib import Path
+
 from harness_bridge.workspace.manager import WorkspaceManager
 
 
 @pytest.mark.asyncio
 async def test_workspace_inherit_mode(temp_git_repo):
     mgr = WorkspaceManager()
-    ws = await mgr.prepare_workspace(mode="inherit", repo_root=temp_git_repo, session_id="test-session-1")
+    ws = await mgr.prepare_workspace(
+        mode="inherit", repo_root=temp_git_repo, session_id="test-session-1"
+    )
     assert ws == temp_git_repo
 
 
@@ -16,7 +18,9 @@ async def test_workspace_worktree_isolation_and_diff(temp_git_repo):
     session_id = "test-session-worktree"
 
     # 1. Prepare worktree
-    ws = await mgr.prepare_workspace(mode="worktree", repo_root=temp_git_repo, session_id=session_id)
+    ws = await mgr.prepare_workspace(
+        mode="worktree", repo_root=temp_git_repo, session_id=session_id
+    )
     assert ws.exists()
     assert (temp_git_repo / ".worktrees" / session_id) == ws
 
@@ -40,5 +44,7 @@ async def test_workspace_worktree_isolation_and_diff(temp_git_repo):
     assert (temp_git_repo / "new_module.py").exists()
 
     # 5. Cleanup
-    await mgr.cleanup_workspace(session_id=session_id, worktree_path=ws, repo_root=temp_git_repo, delete_branch=True)
+    await mgr.cleanup_workspace(
+        session_id=session_id, worktree_path=ws, repo_root=temp_git_repo, delete_branch=True
+    )
     assert not ws.exists()

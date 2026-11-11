@@ -38,7 +38,9 @@ class WorkspaceManager:
 
         # If previous worktree or directory exists, clean it up
         if worktree_path.exists():
-            await run_command_safe(["git", "worktree", "remove", "--force", str(worktree_path)], cwd=repo_root)
+            await run_command_safe(
+                ["git", "worktree", "remove", "--force", str(worktree_path)], cwd=repo_root
+            )
             if worktree_path.exists():
                 shutil.rmtree(worktree_path, ignore_errors=True)
 

@@ -177,6 +177,15 @@ harness-bridge serve
 
 ---
 
+## Contributing
+
+Contributions, issues, and feature requests are welcome!
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for local development setup, testing guidelines, and PR workflow.
+- Please review our [Code of Conduct](CODE_OF_CONDUCT.md).
+- To report security concerns, refer to [SECURITY.md](SECURITY.md).
+
+---
+
 ## License
 
 MIT © [Sukumar Rastogi](https://github.com/sukumar1210)

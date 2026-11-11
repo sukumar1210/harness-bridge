@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sys
 import tempfile
 import time
 from pathlib import Path
+
 import httpx
 from rich.console import Console
-
-# Suppress httpx INFO logging
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from harness_bridge import __version__
 from harness_bridge.core.exceptions import UpdateError
 from harness_bridge.core.process import run_command_safe
+
+# Suppress httpx INFO logging
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 DEFAULT_REPO = "sukumar1210/harness-bridge"
 CACHE_DIR = Path.home() / ".harness-bridge"
@@ -44,7 +44,7 @@ async def check_for_updates(
     force: bool = False,
 ) -> tuple[bool, str, str, str | None]:
     """Check GitHub Releases for an available update.
-    
+
     Returns:
         (has_update, current_version, latest_version, wheel_url)
     """
@@ -64,7 +64,10 @@ async def check_for_updates(
             pass
 
     url = f"https://api.github.com/repos/{repo}/releases/latest"
-    headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": f"harness-bridge/{__version__}"}
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": f"harness-bridge/{__version__}",
+    }
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -122,7 +125,9 @@ async def perform_update(repo: str = DEFAULT_REPO) -> bool:
         err_console.print(f"[green]harness-bridge is already up to date (v{current}).[/green]")
         return True
 
-    err_console.print(f"[bold yellow]New version available: v{latest} (current: v{current})[/bold yellow]")
+    err_console.print(
+        f"[bold yellow]New version available: v{latest} (current: v{current})[/bold yellow]"
+    )
 
     py_exe = Path(sys.executable)
     # Check if we are inside a virtual environment
@@ -153,5 +158,7 @@ async def perform_update(repo: str = DEFAULT_REPO) -> bool:
         if code != 0:
             raise UpdateError(f"Update installation failed (exit {code}):\n{stderr or stdout}")
 
-    err_console.print(f"[bold green]Successfully upgraded harness-bridge to v{latest}![/bold green]")
+    err_console.print(
+        f"[bold green]Successfully upgraded harness-bridge to v{latest}![/bold green]"
+    )
     return True

@@ -1,5 +1,6 @@
 import pytest
-from harness_bridge.server.mcp_server import mcp_app, bridge_list_harnesses
+
+from harness_bridge.server.mcp_server import bridge_list_harnesses
 
 
 @pytest.mark.asyncio

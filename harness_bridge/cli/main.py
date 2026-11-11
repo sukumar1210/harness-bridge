@@ -82,14 +82,20 @@ def version_command() -> None:
 
 @app.command(name="update")
 def update_command(
-    check: bool = typer.Option(False, "--check", "-c", help="Check for available updates without installing."),
-    repo: str = typer.Option("sukumar1210/harness-bridge", "--repo", "-r", help="Target GitHub repository."),
+    check: bool = typer.Option(
+        False, "--check", "-c", help="Check for available updates without installing."
+    ),
+    repo: str = typer.Option(
+        "sukumar1210/harness-bridge", "--repo", "-r", help="Target GitHub repository."
+    ),
 ) -> None:
     """Check for new releases on GitHub and self-update the local installation."""
     if check:
         has_update, current, latest, _ = asyncio.run(check_for_updates(repo, force=True))
         if has_update:
-            console.print(f"[bold yellow]Update available:[/bold yellow] v{current} -> [bold green]v{latest}[/bold green]")
+            console.print(
+                f"[bold yellow]Update available:[/bold yellow] v{current} -> [bold green]v{latest}[/bold green]"
+            )
             console.print("Run [bold cyan]harness-bridge update[/bold cyan] to install.")
         else:
             console.print(f"[green]harness-bridge is up to date (v{current}).[/green]")
@@ -102,11 +108,19 @@ def update_command(
 @app.command(name="run")
 def run_task_command(
     prompt: str = typer.Argument(..., help="Prompt or task instructions to dispatch."),
-    target: str = typer.Option(..., "--target", "-t", help="Target harness name (e.g. 'claude', 'agy')."),
-    workspace: str = typer.Option("worktree", "--workspace", "-w", help="Workspace mode ('worktree' or 'inherit')."),
-    session_id: Optional[str] = typer.Option(None, "--session-id", "-s", help="Existing session ID to resume."),
+    target: str = typer.Option(
+        ..., "--target", "-t", help="Target harness name (e.g. 'claude', 'agy')."
+    ),
+    workspace: str = typer.Option(
+        "worktree", "--workspace", "-w", help="Workspace mode ('worktree' or 'inherit')."
+    ),
+    session_id: Optional[str] = typer.Option(
+        None, "--session-id", "-s", help="Existing session ID to resume."
+    ),
     timeout: int = typer.Option(300, "--timeout", help="Execution timeout in seconds."),
-    repo_root: Optional[Path] = typer.Option(None, "--repo-root", help="Path to repository root (defaults to CWD)."),
+    repo_root: Optional[Path] = typer.Option(
+        None, "--repo-root", help="Path to repository root (defaults to CWD)."
+    ),
 ) -> None:
     """Dispatch a task turn to a target AI harness."""
     mode: WorkspaceMode = "worktree" if workspace == "worktree" else "inherit"
@@ -156,7 +170,9 @@ def test_command() -> None:
     if found:
         console.print(f"[green]✓ Detected installed harnesses:[/green] {', '.join(found)}")
     else:
-        console.print("[yellow]! No supported harnesses currently installed on system PATH.[/yellow]")
+        console.print(
+            "[yellow]! No supported harnesses currently installed on system PATH.[/yellow]"
+        )
 
     # Check git repository
     is_git = (Path.cwd() / ".git").exists()

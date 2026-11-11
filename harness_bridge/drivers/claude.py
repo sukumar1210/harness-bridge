@@ -29,7 +29,9 @@ class ClaudeCodeDriver(BaseDriver):
     ) -> TaskResult:
         binary = self.resolve_binary()
         if not binary:
-            raise HarnessNotFoundError(f"Claude Code binary '{self.binary_name}' not found on PATH.")
+            raise HarnessNotFoundError(
+                f"Claude Code binary '{self.binary_name}' not found on PATH."
+            )
 
         cmd = [
             str(binary),

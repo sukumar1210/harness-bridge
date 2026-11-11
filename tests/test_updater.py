@@ -1,4 +1,3 @@
-import pytest
 from harness_bridge.core.updater import parse_semver
 
 
