@@ -152,8 +152,18 @@ class RoleDefinition(BaseModel):
 class GatePolicy(BaseModel):
     risk_level: Literal["low", "critical"] = "low"
     timeout_seconds: int = 120 # 0 for indefinite pause
-    timeout_action: Literal["proceed", "pause", "reject"] = "proceed"
+    timeout_action: Literal["proceed", "pause", "reject"] = "pause"
     prompt: str = ""
+    on_reject: str | None = Field(default=None, description="Optional StepId to route back to upon rejection")
+
+    @model_validator(mode="after")
+    def validate_critical_gate_policy(self) -> "GatePolicy":
+        if self.risk_level == "critical" and self.timeout_action == "proceed":
+            raise ValueError(
+                "Unsafe GatePolicy: Stages with risk_level='critical' cannot use timeout_action='proceed'. "
+                "Must be 'pause' or 'reject' to prevent unattended mutating actions."
+            )
+        return self
 
 class WorkflowStep(BaseModel):
     id: str
@@ -172,6 +182,15 @@ class TeamPreset(BaseModel):
     workflow: list[WorkflowStep]
 ```
 
+#### Template Interpolation Context
+Step prompts and artifact paths support standard Python `str.format_map` interpolation against runtime execution context:
+* `{goal}`: The top-level goal string supplied at team initiation.
+* `{run_id}`: The unique identifier of the active team execution.
+* `{scratch_dir}`: The absolute path to `.tmp/harness-bridge/{run_id}/`.
+* `{step_id}`: The current step identifier.
+* `{steps.<step_id>.artifact_path}`: Absolute path to deliverables produced by upstream dependency steps.
+* `{steps.<step_id>.output}`: Summary text returned by completed upstream dependency steps.
+
 #### Precedence Resolution Order
 Presets are resolved using a 3-tier fallback strategy:
 1. **Project-Local Presets**: `.harness-bridge/teams/<team_name>.yaml` (highest precedence).
@@ -182,16 +201,23 @@ Presets are resolved using a 3-tier fallback strategy:
 
 ### 3. Core Component Architecture
 
-#### 1. Calling-Session Orchestration & Adopt-and-Warn
-* When an active agent session (e.g. running under Claude Code or Antigravity) invokes `bridge_run_team(preset="feature-dev", goal="...")`, the calling session is assigned the `orchestrator_role`.
-* If the calling session's detected model differs from the preset's declared `preferred_model` for the orchestrator, the tool execution succeeds but returns an informational warning banner:
-  ```json
-  {
-    "status": "RUNNING",
-    "run_id": "run-7f3b8a2c",
-    "warning": "Calling session uses claude-3-5-haiku, but preset recommends claude-3-7-sonnet for orchestrator role."
-  }
-  ```
+#### 1. Calling-Session Orchestration, Standalone CLI Mode & Asynchronous Execution
+* **Asynchronous Dispatch Lifecycle**:
+  * Tool `bridge_run_team(preset="...", goal="...")` operates strictly as an **asynchronous job spawner**. It initializes the FSM in SQLite, provisions `.tmp/`, starts the background DAG runner task, and immediately returns a response envelope containing `run_id`, initial state (`"running"`), and the active step metadata.
+  * Multi-agent runs frequently wait hours at human approval gates. Non-blocking dispatch prevents stdio MCP connection timeouts (typically 60-300s in Claude Code / Antigravity).
+  * The calling orchestrator inspects progress via `bridge_get_team_status(run_id)` or subscribes to Remote Gateway Server-Sent Events (SSE).
+* **Dual Orchestration Modes**:
+  * **Calling-Session Mode (MCP)**: When initiated by an active agent session via MCP, the calling session adopts the `orchestrator_role`. If the calling session's detected model differs from the preset's declared `preferred_model` for the orchestrator, execution proceeds with an informational warning banner:
+    ```json
+    {
+      "status": "running",
+      "run_id": "run-7f3b8a2c",
+      "warning": "Calling session uses claude-3-5-haiku, but preset recommends claude-3-7-sonnet for orchestrator role."
+    }
+    ```
+  * **Standalone Engine Mode (CLI)**: When launched via terminal (`harness-bridge team run`), the engine operates standalone. The deterministic `TeamStateEngine` evaluates DAG dependencies and dispatches worker roles directly without requiring an ambient LLM orchestrator session unless the preset defines specific DAG steps for the orchestrator role.
+* **Step Concurrency via `asyncio.gather`**:
+  * When the DAG contains multiple steps whose `depends_on` prerequisites are fully satisfied (e.g. parallel reviewers in `peer-review.yaml`), the engine dispatches all ready steps concurrently using `asyncio.gather`.
 
 #### 2. Re-Entrant State Engine (`TeamStateEngine`) & SQLite WAL Store
 To survive terminal crashes, client restarts, and long-running human gate waits, the execution state is backed by SQLite with Write-Ahead Logging (`~/.harness-bridge/runs.db`):
@@ -200,7 +226,7 @@ To survive terminal crashes, client restarts, and long-running human gate waits,
 CREATE TABLE team_runs (
     run_id TEXT PRIMARY KEY,
     preset_name TEXT NOT NULL,
-    status TEXT NOT NULL, -- PENDING, RUNNING, AWAITING_APPROVAL, COMPLETED, FAILED, PAUSED
+    status TEXT NOT NULL, -- pending, running, awaiting_approval, completed, failed, paused
     goal TEXT NOT NULL,
     orchestrator_session_id TEXT NOT NULL,
     current_step_id TEXT,
@@ -218,7 +244,7 @@ CREATE TABLE step_runs (
     device_id TEXT NOT NULL,
     harness TEXT NOT NULL,
     model TEXT NOT NULL,
-    status TEXT NOT NULL, -- RUNNING, COMPLETED, FAILED, SKIPPED
+    status TEXT NOT NULL, -- running, completed, failed, skipped
     started_at REAL NOT NULL,
     completed_at REAL,
     artifact_path TEXT,
@@ -231,36 +257,61 @@ CREATE TABLE gate_approvals (
     step_id TEXT NOT NULL,
     risk_level TEXT NOT NULL, -- low, critical
     timeout_seconds INTEGER NOT NULL,
-    timeout_action TEXT NOT NULL,
+    timeout_action TEXT NOT NULL, -- pause, proceed, reject
     expires_at REAL NOT NULL,
-    status TEXT NOT NULL, -- PENDING, APPROVED, REJECTED, AUTO_PROCEEDED, EXPIRED
+    status TEXT NOT NULL, -- pending, approved, rejected, auto_proceeded, expired
     decision_by TEXT,
     decision_timestamp REAL,
+    feedback TEXT,
     FOREIGN KEY (run_id) REFERENCES team_runs(run_id)
 );
+
+CREATE TABLE device_leases (
+    device_id TEXT NOT NULL,
+    harness TEXT NOT NULL,
+    model TEXT NOT NULL,
+    capabilities_json TEXT NOT NULL DEFAULT '[]',
+    gateway_endpoint TEXT,
+    lease_expires_at REAL NOT NULL,
+    last_seen_at REAL NOT NULL,
+    PRIMARY KEY (device_id, harness, model)
+);
+
+CREATE INDEX idx_step_runs_run_id ON step_runs(run_id);
+CREATE INDEX idx_gate_approvals_run_id ON gate_approvals(run_id);
+CREATE INDEX idx_device_leases_expires ON device_leases(lease_expires_at);
 ```
 
 #### 3. Fleet Discovery & Opportunistic Preflight Probing
 * **Registration Cache Lease**: Any harness executing an MCP request or running `harness-bridge ping` registers its `device_id`, available harnesses, and supported models in `device_leases` with a 30-day lease duration.
 * **Preflight Probe (<1.5s Handshake)**:
   1. When assigning an execution target to a role, the Role Binder selects candidates matching the role's `preferred_harness` and `preferred_model`.
-  2. If the candidate is on a remote host or separate process, a lightweight health probe ping is dispatched over HTTP/TCP.
-  3. If no response is received within 1500ms, the node is marked *temporarily unreachable* for the remainder of the run, and the binder immediately routes to the next eligible candidate or the local host.
+  2. If the candidate is on a remote machine, the binder sends an opportunistic health probe to the remote host's authenticated Remote Gateway daemon endpoint (`GET /health` on port 8765, as specified in v0.2.0 `docs/designs/aggregated_sessions_and_remote_gateway.md`).
+  3. If no response is received within 1500ms, the node is marked *temporarily unreachable* for the remainder of the run, and the binder immediately falls back to secondary candidates or the local node. This eliminates standing broadcast heartbeats while ensuring target reachability.
 
-#### 4. Risk-Tiered Human Approval Gates
+#### 4. Risk-Tiered Human Approval Gates & Rejection Transitions
 * When a workflow step specifies a `gate`:
-  * **Low-Risk Gate** (`risk_level: "low"`): For non-destructive stages (plan review, research synthesis). Publishes an event to the Remote Gateway SSE stream. If no human intervention is received within `timeout_seconds` (default 120s), the state engine transitions the gate to `AUTO_PROCEEDED` and advances the DAG.
-  * **Critical Gate** (`risk_level: "critical"`): For mutating actions (git diff merges, terminal command execution, deployment). Forces `timeout_seconds: 0` or `timeout_action: "pause"`. The engine halts step dispatch and persists state. Execution resumes only when an explicit approval is received via:
-    * CLI: `harness-bridge gate approve <gate_id>`
-    * MCP: `bridge_approve_gate(gate_id=..., decision="approved")`
-    * Remote Gateway: `POST /api/v1/gates/{gate_id}/decision`
+  * **Low-Risk Gate** (`risk_level: "low"`): For non-destructive stages (plan review, research synthesis). Publishes an event to the Remote Gateway SSE stream. If no human intervention is received within `timeout_seconds` (default 120s), the state engine transitions the gate to `"auto_proceeded"` and advances the DAG.
+  * **Critical Gate** (`risk_level: "critical"`): For mutating actions (git diff merges, terminal command execution, deployment). Enforces `timeout_action: "pause"` and defaults `timeout_seconds: 0`. The engine halts step dispatch and persists state. Execution resumes only when an explicit approval is received via CLI, MCP, or Gateway.
+* **FSM Rejection Lifecycle**:
+  * When a gate receives a rejection (`decision="rejected"`):
+    1. The gate record status transitions to `"rejected"`.
+    2. If the step's `GatePolicy` defines an `on_reject: "<step_id>"` target, the engine resets that target step to `"pending"`, injects the rejection `feedback` into its prompt context, and re-executes the stage.
+    3. If `on_reject` is absent, the engine transitions the run status to `"paused"` and awaits human CLI intervention (`harness-bridge team resume`).
 
-#### 5. Scratch Space Lifecycle (`.tmp/harness-bridge/{run_id}/`)
-* On run initialization, the engine creates `.tmp/harness-bridge/{run_id}/` in the project root (or system temp directory if running outside a repository).
-* If inside a git repository, the engine appends `.tmp/` to `.git/info/exclude`. This ensures that scratch files, test logs, and intermediate assets are ignored by git without modifying the user's committed `.gitignore`.
+#### 5. Scratch Space Lifecycle & Git Exclusion
+* On run initialization, the engine creates `.tmp/harness-bridge/{run_id}/` in the project root (or system temp directory if running outside a git repository).
+* If inside a git repository, the engine dynamically resolves the exclusion file using `git rev-parse --git-path info/exclude` (handling both traditional `.git` directories and `.worktrees/<session_id>/` pointer files) and appends `.tmp/` if not already present. This keeps scratch assets co-located without dirtying `git status`.
 
 #### 6. Token Telemetry & Historical Role × Model Analytics
-* During each stage turn execution, driver adapters (`claude.py`, `antigravity.py`) extract turn usage stats (`input_tokens`, `output_tokens`, `total_tokens`).
+* Drivers populate a structured `TokenUsage` model:
+  ```python
+  class TokenUsage(BaseModel):
+      input_tokens: int = 0
+      output_tokens: int = 0
+      total_tokens: int = 0
+      cached_tokens: int = 0
+  ```
 * Stored in table `token_telemetry`:
   ```sql
   CREATE TABLE token_telemetry (
@@ -269,6 +320,23 @@ CREATE TABLE gate_approvals (
       step_id TEXT NOT NULL,
       session_id TEXT NOT NULL,
       role_name TEXT NOT NULL,
+      harness TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      total_tokens INTEGER NOT NULL DEFAULT 0,
+      timestamp REAL NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES team_runs(run_id)
+  );
+
+  CREATE INDEX idx_telemetry_run_id ON token_telemetry(run_id);
+  CREATE INDEX idx_telemetry_role_model ON token_telemetry(role_name, model);
+  ```
+* **Zero-Safe Relative Percentages**:
+  * `role_percentage = (SUM(role_tokens) / total_run_tokens * 100.0) if total_run_tokens > 0 else 0.0`
+  * `session_percentage = (SUM(session_tokens) / total_run_tokens * 100.0) if total_run_tokens > 0 else 0.0`
+* **Cross-Run Historical Benchmarks**:
+  * Evaluates `AVG(total_tokens)`, `AVG(input_tokens)`, `AVG(output_tokens)`, P50, and P90 percentiles grouped by `(role_name, model)` across historical sessions in `runs.db`.
       harness TEXT NOT NULL,
       model TEXT NOT NULL,
       input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -295,20 +363,21 @@ CREATE TABLE gate_approvals (
 | :--- | :--- | :--- |
 | `bridge_list_teams` | None | Lists available team presets discovered across built-in, global, and local scopes. |
 | `bridge_inspect_team` | `preset_name: str` | Returns the parsed JSON schema, roles, and DAG topology of a preset. |
-| `bridge_run_team` | `preset_name: str`, `goal: str`, `options: dict = {}` | Initiates a team run; calling session adopts the Orchestrator role. |
+| `bridge_run_team` | `preset_name: str`, `goal: str`, `options: dict = {}` | Asynchronously initiates a team run; returns immediately with `run_id`, `status: "running"`, and active step metadata. |
 | `bridge_get_team_status` | `run_id: str` | Returns current FSM state, active step, pending gate, and dual-dimension token usage. |
-| `bridge_approve_gate` | `gate_id: str`, `decision: Literal["approved", "rejected"]`, `feedback: str = ""` | Approves or rejects a pending human gate. |
-| `bridge_get_token_analytics` | `role: str = None`, `model: str = None`, `window_days: int = 30` | Returns historical token benchmarks and averages for role/model combinations. |
+| `bridge_approve_gate` | `gate_id: str`, `decision: Literal["approved", "rejected"]`, `feedback: str = ""` | Submits human decision for a pending gate with optional guidance feedback. |
+| `bridge_get_token_analytics` | `role: str | None = None`, `model: str | None = None`, `window_days: int = 30` | Returns historical token benchmarks and averages for role/model combinations. |
 
 #### New CLI Commands
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
 | `harness-bridge team list` | None | Displays table of available presets, sources, and roles. |
-| `harness-bridge team run` | `<preset> <goal> [--require-explicit-approvals]` | Launches a team execution run from the terminal. |
+| `harness-bridge team run` | `<preset> [goal] [-p/--prompt <text>] [--require-explicit-approvals]` | Launches a team execution run from the terminal (standalone engine mode). |
 | `harness-bridge team resume` | `<run_id>` | Resumes a paused or interrupted team run from SQLite state. |
 | `harness-bridge team status` | `<run_id>` | Renders live ASCII/Rich DAG status, active role, and gate countdown. |
 | `harness-bridge team report` | `<run_id>` | Prints the final deliverable summary, artifact paths, and dual-dimension token table. |
 | `harness-bridge gate approve` | `<gate_id> [--feedback "..."]` | Submits approval for a pending gate. |
+| `harness-bridge gate reject` | `<gate_id> [--feedback "..."]` | Rejects a pending gate, triggering `on_reject` rollback or pausing execution. |
 | `harness-bridge analytics tokens` | `[--role <name>] [--model <name>] [--matrix]` | Displays cross-run historical `Role × Model` token averages and percentiles. |
 
 ---
@@ -328,10 +397,10 @@ CREATE TABLE gate_approvals (
 * **Reason for Rejection**: *Rejected by author: Multi-agent workflows require crash resilience and deterministic re-entrancy. SQLite in WAL mode (`~/.harness-bridge/runs.db`) provides atomic, concurrent ACID state persistence, allowing users to resume interrupted runs (`harness-bridge team resume <run_id>`) at any time.*
 
 ### 3. Continuous Background Heartbeat Daemons vs. Opportunistic Preflight Probes
-* **Alternative Explored**: Require every participating machine to run a permanent background daemon broadcasting UDP/TCP heartbeats every 30 seconds to maintain a real-time availability map.
+* **Alternative Explored**: Require every participating machine to run a permanent background daemon continuously broadcasting UDP/TCP heartbeats every 30 seconds to maintain a real-time availability map.
 * **Pros**: Constant visibility of fleet liveness.
-* **Cons**: Wastes CPU, battery, and local network traffic; fails completely if a developer forgets to start the background daemon before dispatching a team run.
-* **Reason for Rejection**: *Rejected by author: Combining a 30-day static capability registration lease with an opportunistic, just-in-time preflight probe (<1.5s handshake) immediately before stage dispatch provides reliable reachability guarantees without requiring standing background daemons.*
+* **Cons**: Wastes CPU, battery, and local network traffic; fails completely if a developer forgets to start the broadcast daemon before dispatching a team run.
+* **Reason for Rejection**: *Rejected by author: Continuous broadcast heartbeats are unnecessarily heavy for developer workstations. Instead, remote targets run the standard authenticated Remote Gateway server (introduced in v0.2.0 `docs/designs/aggregated_sessions_and_remote_gateway.md`), and the local bridge issues an opportunistic, just-in-time HTTP preflight probe (`GET /health`, <1.5s timeout) immediately before stage dispatch. This eliminates continuous heartbeat overhead while guaranteeing target reachability.*
 
 ### 4. Static Hardware Binding in YAML Presets vs. Dynamic Capability Resolution
 * **Alternative Explored**: Hardcode physical node names (e.g. `machine: "sukumar-desktop"`) directly into team preset definitions.
@@ -373,10 +442,12 @@ This section enumerates every file that will be created, modified, or updated to
 
 #### 1. Core Data Models: `harness_bridge/core/types.py` (Modify)
 * **Changes**:
+  * Update `WorkspaceMode = Literal["inherit", "worktree", "scratch"]` to natively support non-git scratchpad workspaces.
+  * Define structured `TokenUsage(input_tokens: int, output_tokens: int, total_tokens: int, cached_tokens: int = 0)` model.
+  * Update `TaskResult` to use `token_usage: TokenUsage | None = None`.
   * Define `RoleDefinition`, `GatePolicy`, `WorkflowStep`, and `TeamPreset` Pydantic models.
-  * Define `StepExecutionRecord`, `GateApprovalRecord`, `DeviceLeaseRecord`.
+  * Define `StepExecutionRecord`, `GateApprovalRecord`, and `DeviceLeaseRecord`.
   * Define `TokenTelemetry`, `TokenAccounting`, and `HistoricalTokenAnalytics` models.
-  * Add `token_usage: dict[str, int] | None` to `TaskResult`.
 * **Rationale**: Establishes strict validation contracts for YAML preset loading, state tracking, and token telemetry across all layers.
 
 #### 2. Teams Package Definition: `harness_bridge/teams/__init__.py` (New File)
@@ -408,6 +479,8 @@ This section enumerates every file that will be created, modified, or updated to
 #### 6. Execution State Engine: `harness_bridge/teams/engine.py` (New File)
 * **Changes**:
   * Implements `TeamStateEngine.run(preset: TeamPreset, goal: str, orchestrator_session_id: str) -> str`.
+  * Operates asynchronously, returning a run descriptor immediately while background asyncio tasks evaluate DAG steps.
+  * Dispatches independent ready DAG steps concurrently using `asyncio.gather`.
   * Manages the execution loop: evaluates ready DAG steps, dispatches tasks via `SessionManager`, writes intermediate artifacts to `{scratch_dir}`, and handles gate transitions.
   * Implements risk-tiered gate policy: schedules 120s auto-proceed for `low` risk gates and enforces indefinite pause for `critical` risk gates.
   * Detects model mismatches between calling session and preset orchestrator, injecting informational warning banners.
@@ -416,7 +489,7 @@ This section enumerates every file that will be created, modified, or updated to
 #### 7. Token Telemetry & Analytics Engine: `harness_bridge/teams/telemetry.py` (New File)
 * **Changes**:
   * Implements `TokenTelemetryStore.record(run_id, step_id, session_id, role, harness, model, input_tokens, output_tokens)`.
-  * Computes relative percentages: `get_run_breakdown(run_id) -> TokenAccounting` (returns per-role and per-session usage).
+  * Computes relative percentages with zero-safe guards: `get_run_breakdown(run_id) -> TokenAccounting`.
   * Implements historical SQL aggregator: `get_role_model_benchmarks(role, model, window_days) -> HistoricalTokenAnalytics` calculating averages, sample counts, and P50/P90 distributions.
 * **Rationale**: Solves token budget opacity and provides empirical data for prompt optimization and model routing.
 
@@ -431,9 +504,9 @@ This section enumerates every file that will be created, modified, or updated to
 #### 9. Workspace Scratchpad Lifecycle: `harness_bridge/workspace/manager.py` (Modify)
 * **Changes**:
   * Add `WorkspaceManager.create_scratch_space(run_id: str) -> Path`.
-  * Creates `.tmp/harness-bridge/{run_id}/` in the project root.
-  * Appends `.tmp/` to `.git/info/exclude` if inside a git repository, creating the exclude file if absent.
-* **Rationale**: Prevents scratchpads and temporary files from polluting git status or causing checkout conflicts.
+  * Refactor `WorkspaceManager.prepare_workspace()` to support `mode="scratch"`, provisioning `.tmp/harness-bridge/{run_id}/` (or OS temp directory if outside git) without asserting `.git` existence.
+  * Dynamically resolves the git exclude path using `git rev-parse --git-path info/exclude` (safely handling both standard git repositories and `.worktrees/<session_id>/` pointer files) and appends `.tmp/` if absent.
+* **Rationale**: Prevents scratchpads and temporary files from polluting git status or causing checkout conflicts, and enables non-git directory execution.
 
 #### 10. Drivers Token Extraction: `harness_bridge/drivers/claude.py` & `antigravity.py` (Modify)
 * **Changes**:
