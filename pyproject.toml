@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "harness-bridge"
+version = "0.1.0"
+description = "Harness-agnostic inter-agent proxy and MCP server for AI coding agents"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Sukumar Rastogi" }
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "typer>=0.12.0",
+    "pydantic>=2.7.0",
+    "rich>=13.7.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+harness-bridge = "harness_bridge.cli.main:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["harness_bridge"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
