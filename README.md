@@ -44,6 +44,35 @@
 
 ---
 
+## Subdirectories & System Boundaries
+- [Python Subsystem (`harness_bridge`)](./harness_bridge/README.md): Core implementation including CLI, drivers, session management, workspace sandboxing, and FastMCP server.
+  - [CLI (`harness_bridge/cli`)](./harness_bridge/cli/README.md): Typer/Rich command-line interface and MCP stdio server launcher.
+  - [Core (`harness_bridge/core`)](./harness_bridge/core/README.md): Domain exceptions, schemas, async process runner, harness configuration, and self-updater.
+  - [Drivers (`harness_bridge/drivers`)](./harness_bridge/drivers/README.md): Headless execution adapters and registry for Claude Code and Antigravity CLI.
+  - [Server (`harness_bridge/server`)](./harness_bridge/server/README.md): FastMCP stdio server exposing JSON-RPC tools for agent discovery and dispatch.
+  - [Session (`harness_bridge/session`)](./harness_bridge/session/README.md): Multi-turn conversational session lifecycle, tracing, and hop limit circuit breakers.
+  - [Workspace (`harness_bridge/workspace`)](./harness_bridge/workspace/README.md): Ephemeral git worktree sandboxing, diff extraction, and patch application.
+- [Bootstrap Scripts (`scripts`)](./scripts/README.md): Platform-native installation scripts (`install.sh`, `install.ps1`) for Unix and Windows.
+- [Technical Design Specifications (`docs/designs`)](./docs/designs/SITEMAP.md): Canonical architectural RFCs and feature milestone specifications.
+
+## Global Invariants
+- **Stdio Transport Protocol Purity**: During `harness-bridge serve`, standard output (`stdout`) is strictly reserved for JSON-RPC 2.0 frames. All diagnostics, progress spinners, and log messages route strictly to `stderr`.
+- **Subprocess Pipe Deadlock Immunity**: Cross-platform process execution in `run_command_safe` binds stdin to `DEVNULL` and reads output via `proc.communicate()`, eliminating 64KB OS pipe deadlocks.
+- **Process Group Termination**: Child subprocesses are spawned in detached process groups (`process_group=0` on POSIX) and terminated recursively with `SIGTERM`/`SIGKILL` escalation on timeout.
+- **Workspace Sandboxing Integrity**: Tasks executed under `worktree` isolation operate strictly within ephemeral `.worktrees/{session_id}` directories and dedicated `bridge/session-{session_id}` branches, never modifying the primary working tree until explicitly merged via `bridge_apply_diff`.
+- **Distributed Delegation Recursion Ceiling**: Inter-agent delegation propagates `HARNESS_BRIDGE_TRACE_ID` and increments `HARNESS_BRIDGE_HOP_COUNT`, raising `MaxHopsExceededError` if recursion depth reaches `max_hops` (default: 10).
+
+## Global Side Effects
+- **Child Subprocess Execution**: Spawns headless external AI coding harness CLIs (`claude`, `agy`) and git processes.
+- **Repository Worktree & Branch Mutation**: Creates and removes `.worktrees/{session_id}` directories and mutates local git branches (`bridge/session-*`).
+- **Harness MCP Configuration Writes**: Reads and updates configuration files across user directories (`~/.claude.json`, `~/.gemini/antigravity-cli/mcp_config.json`, `~/.gemini/config/mcp_config.json`).
+- **Network Egress**: Issues HTTPS requests to `api.github.com` for release checks and updates, downloading `.whl` assets when upgrading.
+
+## System Verification
+- Run: `pytest`
+
+---
+
 ## Quick Start & Installation
 
 ### Option 1: One-Line Installer (Recommended)
