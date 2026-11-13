@@ -43,3 +43,7 @@ htmlcov/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Ephemeral EGM design review & brainstorm artifacts
+/*_report.md
+/concepts_brief.md

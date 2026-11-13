@@ -1,9 +1,23 @@
-# Installation Scripts (`scripts`)
+# Platform Scripts (`scripts`)
 
 ## Overview
-The `scripts` directory provides platform-native, zero-dependency bootstrapping scripts for installing and configuring **Harness Bridge** across Unix (Linux/macOS) and Windows environments. The scripts automate environment validation, isolated Python virtualenv provisioning, wheel asset discovery or git-based fallback installation, and CLI wrapper registration in user-local binary paths.
+The `scripts` directory provides platform-native, zero-dependency bootstrapping scripts for installing and configuring **Harness Bridge** across Unix (Linux/macOS) and Windows environments, as well as developer tooling scripts for local git hook enforcement.
 
 ## Interface
+
+### 1. Developer Tooling & Git Hooks
+- `python scripts/validate_commit_msg.py <commit_msg_file>`:
+  - **Platform**: Cross-platform (Linux, macOS, Windows).
+  - **Prerequisites**: Python 3.11+. Standard library only (zero external package dependencies).
+  - **Usage**: Automatically invoked by `.pre-commit-config.yaml` during the Git `commit-msg` hook stage, receiving the path to `.git/COMMIT_EDITMSG`.
+  - **Contract & Behavior**:
+    - Strips git comment lines (starting with `#`) and empty lines.
+    - Matches header against Conventional Commits v1.0.0: `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\./]+\))?(!)?: [^\n\r]+`.
+    - Automatically bypasses merge commits (`Merge (remote-tracking )?branch`, `Merge branches?`, `Merge pull request`, `Merge tag`) and revert commits (`Revert "..."`).
+    - On validation failure: prints actionable diagnostic guidance to `sys.stderr`, displays the exact rejected commit header, allowed types, format examples, and the specification link (`https://www.conventionalcommits.org/`), exiting with code `1`.
+    - On validation success: exits with code `0`.
+
+### 2. Platform Installation & Bootstrapping
 - `bash scripts/install.sh`:
   - **Platform**: Linux, macOS, and POSIX-compliant environments.
   - **Options / Flags**: Executes non-interactively without requiring CLI flags. Can be piped directly via `curl -fsSL <url> | bash`.
@@ -16,6 +30,7 @@ The `scripts` directory provides platform-native, zero-dependency bootstrapping 
   - **Output**: Generates command wrapper shim at `~/.local\bin\harness-bridge.cmd`.
 
 ## Invariants
+- **Zero External Dependencies**: All scripts in `scripts/` require only standard system utilities and standard library Python without requiring pre-installed pip packages.
 - **Shell Compatibility**: `install.sh` uses strict bash execution flags (`set -euo pipefail`) to halt immediately on unhandled command failures or unset variables. `install.ps1` sets `$ErrorActionPreference = "Stop"` for strict error termination.
 - **User-Space Isolation**: All installation actions target the invoking user's home directory (`~/.harness-bridge` and `~/.local/bin`), never requiring superuser or administrative privileges.
 - **Non-Destructive Provisioning**: Reuses existing virtual environment directories (`~/.harness-bridge/venv`) if already present rather than rebuilding from scratch.
@@ -33,4 +48,5 @@ The `scripts` directory provides platform-native, zero-dependency bootstrapping 
 - **Console Output**: Emits status messages and PATH configuration reminders to `stdout` / `stderr`.
 
 ## Verification
-- Run: `bash scripts/install.sh --help 2>&1 || true`
+- Test Commit Validator: `python scripts/validate_commit_msg.py <(echo "feat: test message")`
+- Test Install Script: `bash scripts/install.sh --help 2>&1 || true`

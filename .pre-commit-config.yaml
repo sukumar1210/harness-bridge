@@ -1,0 +1,36 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
+repos:
+  # Local system hooks using the virtualenv tools managed by pyproject.toml
+  - repo: local
+    hooks:
+      - id: ruff-lint
+        name: ruff-lint
+        entry: ruff check --fix
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: ruff-format
+        name: ruff-format
+        entry: ruff format
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: conventional-commit-msg
+        name: enforce-conventional-commits
+        entry: python scripts/validate_commit_msg.py
+        language: system
+        stages: [commit-msg]
+
+      # Optional stage: pre-push unit testing (install with: pre-commit install --hook-type pre-push)
+      - id: pytest-pre-push
+        name: pytest-unit-tests
+        entry: pytest -v tests/
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
