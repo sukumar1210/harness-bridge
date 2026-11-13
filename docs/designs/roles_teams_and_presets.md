@@ -211,30 +211,35 @@ workflow:
 class RoleDefinition(BaseModel):
     description: str
     instructions: str = Field(description="Role system prompt instructions")
-    capabilities: list[str] = Field(default_factory=list) # e.g. ["git_worktree", "terminal_execution", "markdown_synthesis"]
+    capabilities: list[str] = Field(
+        default_factory=list
+    )  # e.g. ["git_worktree", "terminal_execution", "markdown_synthesis"]
     preferred_harness: Literal["claude", "agy"] | None = None
     preferred_model: str | None = None
     workspace_mode: Literal["worktree", "scratch", "inherit"] = "scratch"
+
 
 class GatePolicy(BaseModel):
     risk_level: Literal["low", "critical"] = "low"
     timing: Literal["post", "pre"] = Field(
         default="post",
-        description="Timing relative to step execution: 'post' validates completed deliverable before unblocking dependents; 'pre' gates starting step execution."
+        description="Timing relative to step execution: 'post' validates completed deliverable before unblocking dependents; 'pre' gates starting step execution.",
     )
-    timeout_seconds: int = Field(default=120, description="Auto-proceed timeout window. 0 for strict blocking pause.")
+    timeout_seconds: int = Field(
+        default=120, description="Auto-proceed timeout window. 0 for strict blocking pause."
+    )
     timeout_action: Literal["proceed", "pause", "reject"] = Field(
         default="proceed",
-        description="Action upon timeout expiration. Enforced to 'pause' for critical gates."
+        description="Action upon timeout expiration. Enforced to 'pause' for critical gates.",
     )
     prompt: str = ""
     on_reject: str | None = Field(
         default=None,
-        description="Target StepId to roll back to upon rejection (recursively resets downstream dependents)."
+        description="Target StepId to roll back to upon rejection (recursively resets downstream dependents).",
     )
     max_attempts: int = Field(
         default=3,
-        description="Maximum rollback attempts permitted before automatically pausing the workflow with an alert."
+        description="Maximum rollback attempts permitted before automatically pausing the workflow with an alert.",
     )
 
     @model_validator(mode="after")
@@ -254,14 +259,18 @@ class GatePolicy(BaseModel):
                 self.timeout_action = "proceed"
         return self
 
+
 class WorkflowStep(BaseModel):
     id: str
     role: str
     prompt_template: str
     depends_on: list[str] = Field(default_factory=list)
-    artifact_output: str | None = None # Path template e.g. "{scratch_dir}/spec.md"
-    timeout_seconds: int = Field(default=300, description="Execution timeout in seconds for this step.")
+    artifact_output: str | None = None  # Path template e.g. "{scratch_dir}/spec.md"
+    timeout_seconds: int = Field(
+        default=300, description="Execution timeout in seconds for this step."
+    )
     gate: GatePolicy | None = None
+
 
 class TeamPreset(BaseModel):
     schema_version: str = "0.3.0"
@@ -271,12 +280,14 @@ class TeamPreset(BaseModel):
     roles: dict[str, RoleDefinition]
     workflow: list[WorkflowStep]
 
+
 class RoleTokenBreakdown(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
     cached_tokens: int = 0
     percentage: float = 0.0
+
 
 class SessionTokenBreakdown(BaseModel):
     role_name: str
@@ -288,11 +299,13 @@ class SessionTokenBreakdown(BaseModel):
     cached_tokens: int = 0
     percentage: float = 0.0
 
+
 class TokenAccounting(BaseModel):
     run_id: str
     total_run_tokens: int = 0
     by_role: dict[str, RoleTokenBreakdown] = Field(default_factory=dict)
     by_session: dict[str, SessionTokenBreakdown] = Field(default_factory=dict)
+
 
 class HistoricalTokenAnalytics(BaseModel):
     role: str

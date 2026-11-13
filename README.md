@@ -1,6 +1,7 @@
 # Harness Bridge
 
 [![CI](https://github.com/sukumar1210/harness-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/sukumar1210/harness-bridge/actions/workflows/ci.yml)
+[![Discussions](https://img.shields.io/badge/Discussions-Join%20Roadmap%20Poll-purple.svg)](https://github.com/sukumar1210/harness-bridge/discussions/16)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 **Harness Bridge** is a lightweight, harness-agnostic inter-agent proxy and Model Context Protocol (MCP) server for AI coding agents. It enables CLI-based harnesses (such as **Claude Code** and **Antigravity CLI**) to interoperate seamlessly, dispatching tasks, executing code in isolated sandboxes, and collaborating across distinct subscription accounts.
@@ -236,6 +237,7 @@ harness-bridge serve
 ## Contributing
 
 Contributions, issues, and feature requests are welcome!
+- Vote on upcoming roadmap capabilities or propose new ideas in our [Feature Voting & Roadmap Hub](https://github.com/sukumar1210/harness-bridge/discussions/16) or browse the [Live Ideas Leaderboard](https://github.com/sukumar1210/harness-bridge/discussions/categories/ideas?discussions_q=category:Ideas+sort:top).
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for local development setup, git hooks (`pre-commit`), testing guidelines, and PR workflow.
 - Please review our [Code of Conduct](CODE_OF_CONDUCT.md).
 - To report security concerns, refer to [SECURITY.md](SECURITY.md).

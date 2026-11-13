@@ -244,9 +244,13 @@ def main() -> int:
         sys.stderr.write("\n" + "=" * 70 + "\n")
         sys.stderr.write("❌ [COMMIT REJECTED] Non-Compliant Commit Message Format\n")
         sys.stderr.write("=" * 70 + "\n\n")
-        sys.stderr.write(f"Your commit message header was:\n  \"{first_line}\"\n\n")
-        sys.stderr.write("Harness Bridge strictly enforces the Conventional Commits specification.\n")
-        sys.stderr.write("Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert\n\n")
+        sys.stderr.write(f'Your commit message header was:\n  "{first_line}"\n\n')
+        sys.stderr.write(
+            "Harness Bridge strictly enforces the Conventional Commits specification.\n"
+        )
+        sys.stderr.write(
+            "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert\n\n"
+        )
         sys.stderr.write("Format:\n")
         sys.stderr.write("  <type>[optional scope][!]: <description>\n\n")
         sys.stderr.write("Examples:\n")

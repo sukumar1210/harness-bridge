@@ -121,8 +121,8 @@ When an agent invokes `bridge_join_session(aggregated_session_id, working_direct
   class PeerMessage(BaseModel):
       message_id: str
       aggregated_session_id: str
-      sender: str           # <device_id>/<harness>/<session_id>
-      recipient: str | None # None for broadcast
+      sender: str  # <device_id>/<harness>/<session_id>
+      recipient: str | None  # None for broadcast
       message_type: Literal["text", "task_handover", "artifact", "control"]
       content: str
       metadata: dict[str, Any] = Field(default_factory=dict)

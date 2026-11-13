@@ -286,7 +286,7 @@ Different harnesses store MCP server configurations in slightly different schema
         transport: Literal["stdio", "sse", "http"] = "stdio"
         source_harness: str
         scope: Literal["global", "project"] = "global"
-        trust: bool = True # Antigravity security trust flag
+        trust: bool = True  # Antigravity security trust flag
         extra_fields: dict[str, Any] = Field(default_factory=dict)
         model_config = ConfigDict(extra="allow")
     ```
