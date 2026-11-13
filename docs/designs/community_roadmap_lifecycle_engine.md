@@ -6,7 +6,7 @@
 * **Date:** 2026-11-13
 * **Component Tags:** `discussions`, `roadmap`, `bot`, `github-actions`, `community-governance`, `milestones`, `rbac`
 
-> ⚠️ **Architecture Update (2026-11-13)**: *This bot-driven engine design has been superseded by **100% Native Community Voting**. All voting, real-time counting, and ranking are delegated natively to GitHub Discussions ([Live Ideas Leaderboard](https://github.com/sukumar1210/harness-bridge/discussions/categories/ideas?discussions_q=category:Ideas+sort:top)), eliminating all custom bot code, runner consumption, and GitHub Actions workflows.*
+> ⚠️ **Architecture Update (2026-11-13)**: *This bot-driven engine design has been superseded by **100% Native Community Voting**. All voting, real-time counting, and ranking are delegated natively to GitHub Discussions ([Live Ideas Leaderboard](https://github.com/sukumar1210/harness-bridge/discussions/categories/ideas?discussions_q=is:open+category:Ideas+%22[Idea]%22+sort:top)), eliminating all custom bot code, runner consumption, and GitHub Actions workflows.*
 
 ---
 

@@ -301,5 +301,5 @@ When modifying server or process code:
 ## Community & Questions
 
 - Join the [GitHub Discussions](https://github.com/sukumar1210/harness-bridge/discussions) to ask questions, discuss architecture, or brainstorm ideas.
-- Vote on upcoming roadmap capabilities in our [Community Feature Voting & Roadmap Hub](https://github.com/sukumar1210/harness-bridge/discussions/16) or track the [Live Community Ideas Leaderboard](https://github.com/sukumar1210/harness-bridge/discussions/categories/ideas?discussions_q=category:Ideas+sort:top).
+- Vote on upcoming roadmap capabilities in our [Community Feature Voting & Roadmap Hub](https://github.com/sukumar1210/harness-bridge/discussions/16) or track the [Live Community Ideas Leaderboard](https://github.com/sukumar1210/harness-bridge/discussions/categories/ideas?discussions_q=is:open+category:Ideas+%22[Idea]%22+sort:top).
 - For concrete bug reports or scoped engineering tasks, open an issue in the issue tracker.

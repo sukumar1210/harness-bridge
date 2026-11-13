@@ -1,0 +1,49 @@
+title: "[Idea]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 💡 Propose a New Feature for Harness Bridge
+        Thank you for contributing your architectural ideas! Proposals submitted here will be dynamically ranked by the community on the **[Live Ideas Leaderboard](https://github.com/sukumar1210/harness-bridge/discussions/categories/ideas?discussions_q=is:open+category:Ideas+%22[Idea]%22+sort:top)**.
+  - type: input
+    id: subsystem
+    attributes:
+      label: Target Subsystem
+      description: Which subsystem or layer does this capability affect?
+      placeholder: e.g. Core & Session, Drivers, CLI & Workspace, Security
+    validations:
+      required: true
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement & Motivation
+      description: What challenge, workflow friction, or multi-agent limitation does this solve?
+      placeholder: Describe the motivation and current developer pain point...
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Architecture & Specification
+      description: Detailed breakdown of the proposed design, new MCP tools, CLI flags, or data models.
+      placeholder: Describe the technical design, contracts, or UX flow...
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered & Trade-offs
+      description: What other approaches or workarounds were evaluated? Why is this approach superior?
+      placeholder: Alternative patterns, existing libraries, or reasons against...
+    validations:
+      required: false
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Community Standards
+      options:
+        - label: I have checked existing discussions and RFCs to confirm this is not a duplicate.
+          required: true
+        - label: I understand that community upvotes directly prioritize proposals for upcoming milestone roadmaps.
+          required: true

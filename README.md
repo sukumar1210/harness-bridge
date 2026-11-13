@@ -237,7 +237,7 @@ harness-bridge serve
 ## Contributing
 
 Contributions, issues, and feature requests are welcome!
-- Vote on upcoming roadmap capabilities or propose new ideas in our [Feature Voting & Roadmap Hub](https://github.com/sukumar1210/harness-bridge/discussions/16) or browse the [Live Ideas Leaderboard](https://github.com/sukumar1210/harness-bridge/discussions/categories/ideas?discussions_q=category:Ideas+sort:top).
+- Vote on upcoming roadmap capabilities or propose new ideas in our [Feature Voting & Roadmap Hub](https://github.com/sukumar1210/harness-bridge/discussions/16) or browse the [Live Ideas Leaderboard](https://github.com/sukumar1210/harness-bridge/discussions/categories/ideas?discussions_q=is:open+category:Ideas+%22[Idea]%22+sort:top).
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for local development setup, git hooks (`pre-commit`), testing guidelines, and PR workflow.
 - Please review our [Code of Conduct](CODE_OF_CONDUCT.md).
 - To report security concerns, refer to [SECURITY.md](SECURITY.md).
