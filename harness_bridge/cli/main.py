@@ -13,7 +13,12 @@ from rich.table import Table
 
 from harness_bridge import __version__
 from harness_bridge.core.types import TaskSpec, WorkspaceMode
-from harness_bridge.core.updater import check_for_updates, maybe_notify_update, perform_update
+from harness_bridge.core.updater import (
+    check_for_updates,
+    maybe_notify_update,
+    perform_update,
+    restart_running_servers,
+)
 from harness_bridge.drivers.registry import list_all_harness_info
 from harness_bridge.server.mcp_server import run_server
 from harness_bridge.session.manager import SessionManager
@@ -103,6 +108,25 @@ def update_command(
         success = asyncio.run(perform_update(repo))
         if not success:
             raise typer.Exit(code=1)
+
+
+@app.command(name="reload")
+def reload_command() -> None:
+    """Restart running background MCP servers so clients immediately pick up updated code."""
+    count = restart_running_servers()
+    if count > 0:
+        console.print(
+            f"[bold green]Successfully reloaded {count} running harness-bridge serve instance(s).[/bold green]\n"
+            "[dim]Connected MCP clients (Claude Code, Antigravity) will automatically reconnect on their next turn.[/dim]"
+        )
+    else:
+        console.print("[green]No stale background harness-bridge serve instances found.[/green]")
+
+
+@app.command(name="restart", hidden=True)
+def restart_command() -> None:
+    """Alias for reload."""
+    reload_command()
 
 
 @app.command(name="run")

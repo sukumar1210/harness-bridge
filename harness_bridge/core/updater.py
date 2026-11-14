@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -12,7 +14,7 @@ from rich.console import Console
 
 from harness_bridge import __version__
 from harness_bridge.core.exceptions import UpdateError
-from harness_bridge.core.process import run_command_safe
+from harness_bridge.core.process import run_command_safe, terminate_pid_group
 
 # Suppress httpx INFO logging
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -37,6 +39,69 @@ def parse_semver(v: str) -> tuple[int, ...]:
         except ValueError:
             break
     return tuple(parts) if parts else (0, 0, 0)
+
+
+def find_running_serve_pids() -> list[int]:
+    """Find all running harness-bridge serve process IDs excluding the current process."""
+    current_pid = os.getpid()
+    serve_pids: list[int] = []
+
+    # On POSIX systems with /proc
+    proc_dir = Path("/proc")
+    if proc_dir.exists():
+        for pid_entry in proc_dir.iterdir():
+            if not pid_entry.is_dir() or not pid_entry.name.isdigit():
+                continue
+            pid = int(pid_entry.name)
+            if pid == current_pid:
+                continue
+            cmdline_file = pid_entry / "cmdline"
+            try:
+                cmdline = (
+                    cmdline_file.read_bytes()
+                    .replace(b"\x00", b" ")
+                    .decode("utf-8", errors="replace")
+                )
+                if "harness-bridge" in cmdline and "serve" in cmdline:
+                    serve_pids.append(pid)
+            except (PermissionError, FileNotFoundError, ProcessLookupError):
+                continue
+        return serve_pids
+
+    # Fallback for systems without /proc (e.g. macOS)
+    if sys.platform != "win32":
+        try:
+            res = subprocess.run(
+                ["pgrep", "-f", "harness-bridge.*serve"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    try:
+                        p = int(line.strip())
+                        if p != current_pid:
+                            serve_pids.append(p)
+                    except ValueError:
+                        pass
+        except Exception:
+            pass
+
+    return serve_pids
+
+
+def restart_running_servers() -> int:
+    """Gracefully terminate running background serve instances so MCP clients automatically reconnect."""
+    pids = find_running_serve_pids()
+    restarted = 0
+    for pid in pids:
+        try:
+            terminate_pid_group(pid, timeout=1.5)
+            restarted += 1
+        except Exception:
+            pass
+    return restarted
 
 
 async def check_for_updates(
@@ -129,6 +194,12 @@ async def perform_update(repo: str = DEFAULT_REPO) -> bool:
 
     if not has_update:
         err_console.print(f"[green]harness-bridge is already up to date (v{current}).[/green]")
+        # Check if there are running background instances to refresh
+        reloaded = restart_running_servers()
+        if reloaded > 0:
+            err_console.print(
+                f"[dim]Reloaded {reloaded} active harness-bridge serve process(es). Connected MCP clients will automatically reconnect.[/dim]"
+            )
         return True
 
     err_console.print(
@@ -163,6 +234,13 @@ async def perform_update(repo: str = DEFAULT_REPO) -> bool:
         code, stdout, stderr = await run_command_safe(cmd, timeout=120.0)
         if code != 0:
             raise UpdateError(f"Update installation failed (exit {code}):\n{stderr or stdout}")
+
+    # Seamlessly reload running servers so clients pick up updated code
+    reloaded = restart_running_servers()
+    if reloaded > 0:
+        err_console.print(
+            f"[dim]Reloaded {reloaded} active harness-bridge serve process(es). Connected MCP clients will automatically reconnect.[/dim]"
+        )
 
     err_console.print(
         f"[bold green]Successfully upgraded harness-bridge to v{latest}![/bold green]"
