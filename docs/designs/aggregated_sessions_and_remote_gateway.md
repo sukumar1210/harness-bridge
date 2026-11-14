@@ -277,3 +277,42 @@ This section enumerates every file that will be created, modified, or updated to
 4. **Phase 4: Documentation & Release**
    * Update `README.md` and release notes.
    * Run full test matrix and linting verification.
+
+
+---
+
+## Evolution: Dual-Topology Collaboration Engine (Issues #26, #27, #28)
+
+* **Target Milestone:** `v0.2.0 - Aggregated Swarms & Remote Gateway`
+* **Specification Source:** [`concepts_brief.md`](https://github.com/sukumar1210/harness-bridge/blob/main/concepts_brief.md)
+* **Tracking Issues:**
+  * [#26](https://github.com/sukumar1210/harness-bridge/issues/26): `feat(dialogue): Bounded Coordinated Dialogue engine with shared worktree and turn commit sequencing`
+  * [#27](https://github.com/sukumar1210/harness-bridge/issues/27): `feat(mesh): Zero-daemon decentralized P2P mailbox rooms, byte cursors, and TTL file leases`
+  * [#28](https://github.com/sukumar1210/harness-bridge/issues/28): `feat(wake): Autonomous session waking adapters for active interactive terminals with prompt-injection defense`
+
+### Architectural Evolution
+
+The original design proposed heavy background ASGI gateway daemons (HTTP/WebSocket) for inter-agent communication. Based on the multi-lens architecture review and findings from `concepts_brief.md`, `v0.2.0` evolves to a **Dual-Topology Collaboration Engine** that eliminates daemon fragility in favor of local, zero-daemon coordination:
+
+1. **Bounded Coordinated Dialogue (Issue #26)**:
+   - Enables the lead agent to initiate a turn-bounded debate between two agent harnesses (e.g. Claude Code reviewing Antigravity or Codex).
+   - Both agents operate within a **single shared isolated Git worktree** (`.worktrees/dialogue-<id>`) on branch `bridge/dialogue-<id>`.
+   - Strict turn-based commit sequencing (`git add -A && git commit -m "Turn N: <agent> proposal"`) guarantees clean working tree states without index collisions.
+   - Enforces a hard `max_dialogue_turns` ceiling with early consensus exit (`[CONSENSUS_REACHED]`), returning a consolidated structured transcript and unified Git diff via `bridge_coordinate_dialogue`.
+
+2. **Zero-Daemon Peer-to-Peer Mesh (Issue #27)**:
+   - Decentralized, asynchronous mailbox channels under `~/.harness-bridge/mesh/<room_id>/`.
+   - Immutable append-only `messages.ndjson` event logs with per-agent byte-offset cursors (`cursors/<agent_id>.cursor`).
+   - Zero-daemon file leases (`leases/<resource>.lock`) with 15s TTL, 5s heartbeats, and automatic peer lock breaking.
+   - Asymmetric `replyTo` threading, distributed `hop_count` propagation (`MAX_HOPS = 10`), and token-bucket burst debouncing to prevent infinite message tennis.
+   - MCP tools: `bridge_mesh_publish`, `bridge_mesh_poll`, `bridge_mesh_members`.
+
+3. **Hybrid Execution & Autonomous Session Waking (Issue #28)**:
+   - Default headless background execution via Bridge Engine.
+   - Autonomous session waking for active interactive terminal sessions via:
+     - Claude Code: `SessionStart` watching `.wake/claude-<session_id>.signal` + `FileChanged` hook.
+     - Antigravity: `agy` IPC signal / hook.
+     - OpenAI Codex CLI: `codex queue --thread <id> --message <notice>`.
+     - OpenCode: `opencode api session.prompt --param sessionID=<id> -d '{"delivery":"queue"}'`.
+   - Prompt-injection defense: wake notices carry only sanitized, non-executable metadata schemas requiring explicit tool inspection.
+   - Automated setup and hook diagnostics integrated into `harness-bridge setup`.

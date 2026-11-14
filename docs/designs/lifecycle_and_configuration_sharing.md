@@ -509,3 +509,20 @@ Harness Bridge bridges the structural differences between Antigravity/Shared dir
 ---
 
 *Drafted with EGM*
+
+
+---
+
+## Extension: Tier-1 Driver Expansion (OpenAI Codex CLI & OpenCode) (Issue #25)
+
+* **Target Milestone:** `v0.1.0 - Lifecycle Management & Configuration Sharing`
+* **Tracking Issue:** [#25](https://github.com/sukumar1210/harness-bridge/issues/25)
+* **Specification Source:** [`concepts_brief.md`](https://github.com/sukumar1210/harness-bridge/blob/main/concepts_brief.md)
+
+### Architectural Addendum
+
+To ensure that the lifecycle management and configuration sharing tools delivered in `v0.1.0` (uninstaller scripts, setup automation, and cross-harness discovery) cover the full breadth of enterprise and open coding harnesses immediately, `v0.1.0` expands native driver support beyond Claude Code and Antigravity to include:
+1. **OpenAI Codex CLI (`codex`)**: Subprocess driver executing turns, enforcing timeouts, and parsing structured outputs.
+2. **OpenCode (`opencode`)**: Driver integrating with OpenCode's local REST prompt API or CLI.
+3. **Core Collaboration Type Schemas**: Pydantic v2 schemas in `harness_bridge/core/types.py` (`DialogueSpec`, `DialogueResult`, `DialogueTurn`, `MeshMessage`, `MeshRoomState`, `LeaseInfo`, `WakeNotice`), establishing the type foundations for multi-agent collaboration in `v0.2.0`.
+4. **Universal Driver Discovery**: `harness-bridge list` and `harness-bridge setup` updated to detect, inspect, and configure all four Tier-1 harnesses on system `PATH`.
