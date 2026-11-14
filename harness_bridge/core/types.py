@@ -12,7 +12,7 @@ class TaskSpec(BaseModel):
     harness: str
     prompt: str
     session_id: str | None = None
-    workspace_mode: WorkspaceMode = "worktree"
+    workspace_mode: WorkspaceMode = "inherit"
     timeout_seconds: int = 300
     hop_count: int = 0
     max_hops: int = 10

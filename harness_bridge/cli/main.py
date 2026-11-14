@@ -107,12 +107,18 @@ def update_command(
 
 @app.command(name="run")
 def run_task_command(
-    prompt: str = typer.Argument(..., help="Prompt or task instructions to dispatch."),
+    prompt: str = typer.Argument(
+        ...,
+        help="Prompt or task instructions to dispatch (e.g. dev work, code review, or exploration).",
+    ),
     target: str = typer.Option(
         ..., "--target", "-t", help="Target harness name (e.g. 'claude', 'agy')."
     ),
     workspace: str = typer.Option(
-        "worktree", "--workspace", "-w", help="Workspace mode ('worktree' or 'inherit')."
+        "inherit",
+        "--workspace",
+        "-w",
+        help="Workspace mode ('inherit' for same repo, 'worktree' for isolated branch sandbox; remember to clean up when done).",
     ),
     session_id: Optional[str] = typer.Option(
         None, "--session-id", "-s", help="Existing session ID to resume."

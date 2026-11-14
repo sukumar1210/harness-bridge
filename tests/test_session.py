@@ -22,3 +22,4 @@ def test_task_spec_resume_flag_defaults():
     spec = TaskSpec(harness="claude", prompt="hello")
     assert spec.is_resume is False
     assert spec.session_id is None
+    assert spec.workspace_mode == "inherit"
