@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from pathlib import Path
 
 from harness_bridge.core.types import TaskResult, TaskSpec
@@ -35,5 +36,7 @@ class BaseDriver(ABC):
         task: TaskSpec,
         cwd: Path,
         env: dict[str, str],
+        log_path: Path | None = None,
+        pid_callback: Callable[[int], None] | None = None,
     ) -> TaskResult:
         """Execute a single headless turn on the target harness."""

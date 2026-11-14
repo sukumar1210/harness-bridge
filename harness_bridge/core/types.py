@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 WorkspaceMode = Literal["inherit", "worktree"]
-SessionStatus = Literal["running", "completed", "failed", "timeout"]
+SessionStatus = Literal["running", "completed", "failed", "timeout", "cancelled"]
+
+
+class TokenUsage(BaseModel):
+    """Token consumption and estimated cost statistics."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float | None = None
 
 
 class TaskSpec(BaseModel):
@@ -18,6 +27,8 @@ class TaskSpec(BaseModel):
     max_hops: int = 10
     repo_root: str | None = None
     is_resume: bool = False
+    harness_session_id: str | None = None
+    detach: bool = False
 
 
 class TaskResult(BaseModel):
@@ -28,6 +39,10 @@ class TaskResult(BaseModel):
     diff: str | None = None
     exit_code: int = 0
     duration_seconds: float = 0.0
+    harness_session_id: str | None = None
+    usage: TokenUsage | None = None
+    num_turns: int | None = None
+    driver_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ApplyResult(BaseModel):
@@ -52,3 +67,8 @@ class SessionInfo(BaseModel):
     worktree_path: str | None = None
     turn_count: int = 0
     created_at: float = 0.0
+    harness_session_id: str | None = None
+    active_pid: int | None = None
+    status: SessionStatus = "running"
+    driver_metadata: dict[str, Any] = Field(default_factory=dict)
+    last_turn_result: TaskResult | None = None

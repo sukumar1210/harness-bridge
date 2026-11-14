@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +12,7 @@ from mcp.server.mcpserver import MCPServer
 from rich.console import Console
 
 from harness_bridge import __version__
-from harness_bridge.core.types import TaskSpec, WorkspaceMode
+from harness_bridge.core.types import SessionInfo, TaskSpec, WorkspaceMode
 from harness_bridge.drivers.registry import list_all_harness_info
 from harness_bridge.session.manager import SessionManager
 
@@ -46,6 +49,7 @@ async def bridge_dispatch_task(
     workspace_mode: str = "inherit",
     timeout_seconds: int = 300,
     repo_root: str | None = None,
+    detach: bool = False,
 ) -> dict[str, Any]:
     """Dispatch a coding task or conversational turn to a target AI agent harness (e.g. 'claude' or 'agy').
     Use this tool to delegate dev work (feature implementation, bug fixes, refactoring), code and security reviews, or technical exploration and architectural prototyping to another agent.
@@ -58,18 +62,60 @@ async def bridge_dispatch_task(
             Set to 'worktree' when delegating risky refactors, speculative implementations, parallel experiments, or tasks requiring an isolated branch diff review before applying. When using 'worktree', always review the resulting diff, apply it via bridge_apply_diff if approved, and clean up the temporary worktree when done using bridge_close_session(session_id, cleanup_worktree=True).
         timeout_seconds: Execution timeout in seconds (default: 300).
         repo_root: Path to target git repository (defaults to current directory).
+        detach: If True, dispatches the task asynchronously in the background and returns the session_id immediately to prevent client timeouts on long turns. Poll or retrieve output via bridge_get_session.
     """
     mode: WorkspaceMode = "worktree" if workspace_mode == "worktree" else "inherit"
+    resolved_session_id = session_id or str(uuid.uuid4())
     spec = TaskSpec(
         harness=harness,
         prompt=prompt,
-        session_id=session_id,
+        session_id=resolved_session_id,
         workspace_mode=mode,
         timeout_seconds=timeout_seconds,
         repo_root=repo_root,
+        detach=detach,
     )
+
+    if detach:
+        # Pre-register session in memory and disk immediately with status 'running'
+        init_session = _session_manager.get_session(resolved_session_id)
+        if not init_session:
+            init_session = SessionInfo(
+                session_id=resolved_session_id,
+                harness=harness,
+                workspace_mode=mode,
+                turn_count=1,
+                created_at=time.time(),
+                status="running",
+            )
+            _session_manager.sessions[resolved_session_id] = init_session
+            _session_manager._save_session(init_session)
+
+        # Launch background task execution
+        asyncio.create_task(_session_manager.execute_task(spec))
+        return {
+            "session_id": resolved_session_id,
+            "harness": harness,
+            "status": "running",
+            "output": f"Task dispatched in background to {harness}. Use bridge_get_session('{resolved_session_id}') to inspect status and output.",
+            "diff": None,
+            "exit_code": 0,
+            "duration_seconds": 0.0,
+        }
+
     result = await _session_manager.execute_task(spec)
     return result.model_dump()
+
+
+@mcp_app.tool()
+async def bridge_cancel_session(session_id: str) -> dict[str, Any]:
+    """Cancel an active or running task session and terminate its subprocess group.
+
+    Args:
+        session_id: Session ID to cancel.
+    """
+    cancelled = await _session_manager.cancel_session(session_id)
+    return {"session_id": session_id, "cancelled": cancelled}
 
 
 @mcp_app.tool()
@@ -91,13 +137,34 @@ async def bridge_apply_diff(
 
 @mcp_app.tool()
 async def bridge_get_session(session_id: str) -> dict[str, Any]:
-    """Retrieve tracking details for an active or past session.
+    """Retrieve tracking details, output, diff, and token usage for an active or past session.
 
     Args:
         session_id: Session ID to inspect.
     """
     session = _session_manager.get_session(session_id)
-    return session.model_dump() if session else {"error": f"Session '{session_id}' not found"}
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
+
+    data = session.model_dump()
+    if session.last_turn_result:
+        data["output"] = session.last_turn_result.output
+        data["diff"] = session.last_turn_result.diff
+        data["exit_code"] = session.last_turn_result.exit_code
+        data["duration_seconds"] = session.last_turn_result.duration_seconds
+        data["usage"] = (
+            session.last_turn_result.usage.model_dump() if session.last_turn_result.usage else None
+        )
+        data["num_turns"] = session.last_turn_result.num_turns
+    else:
+        data["output"] = ""
+        data["diff"] = None
+        data["exit_code"] = 0
+        data["duration_seconds"] = 0.0
+        data["usage"] = None
+        data["num_turns"] = None
+
+    return data
 
 
 @mcp_app.tool()
