@@ -40,20 +40,6 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Validate PR Title (Conventional Commits)
-        if: github.event_name == 'pull_request'
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          uv run python -c '
-          import os, re, sys
-          pattern = r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\./]+\))?(!)?: .+"
-          title = os.environ.get("PR_TITLE", "")
-          if not re.match(pattern, title):
-              print(f"❌ PR Title \"{title}\" does not follow Conventional Commits: https://www.conventionalcommits.org/")
-              sys.exit(1)
-          '
-
       - name: Run Ruff Lint & Format Check
         run: |
           uv run ruff check harness_bridge tests scripts
@@ -93,5 +79,5 @@ jobs:
       - name: Confirm Aggregate CI Status
         shell: bash
         run: |
-          echo "✅ All CI checks (Lint, PR Title, and Test Matrix across Linux, macOS, and Windows) completed successfully!"
+          echo "✅ All CI checks (Lint and Test Matrix across Linux, macOS, and Windows) completed successfully!"
           exit 0

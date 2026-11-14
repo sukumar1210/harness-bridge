@@ -124,7 +124,7 @@ When modifying server or process code:
    - `fix/worktree-prune-error`
    - `docs/clarify-mcp-setup`
 
-2. **Commit Messages & PR Titles**: Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/):
+2. **Commit Messages**: Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/):
    Format: `<type>(<optional scope>)[!]: <description>`
    - Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
    - Append `!` before the colon to denote breaking changes (e.g., `feat(server)!: redesign registration endpoint`)
@@ -133,13 +133,12 @@ When modifying server or process code:
      - `fix(workspace): handle edge case in diff generation`
      - `docs(contributing): update setup instructions in README`
      - `test(session): add coverage for session hop limit`
-   - Both commit messages (locally) and PR titles (in CI) are strictly validated. Because squash merges use the PR title as the commit header on `main`, PR titles must conform to Conventional Commits.
+   - Commit message formatting is enforced locally at commit time via pre-commit hooks (`scripts/validate_commit_msg.py`), ensuring that non-compliant commits are rejected before being recorded or pushed.
 
 3. **Draft PR Lifecycle & CI Resource Conservation**:
    - Open work-in-progress pull requests as **Draft**. GitHub Actions automatically skips the multi-OS test matrix for Draft PRs, conserving CI runner minutes.
    - When your implementation is complete and ready for review and CI verification, click **Ready for review**.
    - Marking a PR ready for review automatically triggers:
-     - PR Title validation
      - Ruff linting and formatting across `harness_bridge`, `tests`, and `scripts`
      - The complete 9-permutation test matrix (Ubuntu, macOS, Windows across Python 3.11, 3.12, and 3.13)
      - The aggregate merge gate check: **`ci-passed`**

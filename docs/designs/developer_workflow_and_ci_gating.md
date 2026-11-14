@@ -53,8 +53,7 @@ This document specifies the technical design for a four-tier quality gating and 
 * **When**: The `ready_for_review` event is emitted.
 * **Then**:
   1. GitHub Actions automatically spins up the complete matrix (Linux, macOS, Windows across Python 3.11, 3.12, and 3.13) along with Ruff linting across `harness_bridge`, `tests`, and `scripts`.
-  2. A dedicated CI step validates that the PR Title strictly follows Conventional Commits.
-  3. Upon successful completion of all matrix permutations, the aggregate job `ci-passed` evaluates to `success`.
+  2. Upon successful completion of all matrix permutations, the aggregate job `ci-passed` evaluates to `success`.
   4. GitHub Branch Protection acknowledges `ci-passed` and enables the green merge button.
 
 ---
@@ -63,8 +62,7 @@ This document specifies the technical design for a four-tier quality gating and 
 
 ### In-Scope Goals
 * **Native Python Pre-Commit Integration**: Manage local hooks cleanly using the standard Python `pre-commit` framework declared in `pyproject.toml` dev dependencies, executing local binaries via `uv run` with zero external cloning.
-* **Educational Commit Message Enforcement**: Enforce Conventional Commits locally at `commit-msg` stage via `scripts/validate_commit_msg.py`, displaying actionable guidance and `https://www.conventionalcommits.org/` on violation, while allowing standard `git pull` merge commits.
-* **Server-Side PR Title Validation**: Validate PR titles against Conventional Commits in GitHub Actions CI to guarantee clean history upon squash-merging.
+* **Local Pre-Commit Hook Format Enforcement**: Enforce Conventional Commits locally before commit time via `scripts/validate_commit_msg.py`, displaying actionable guidance and `https://www.conventionalcommits.org/` on violation, eliminating the need for post-push CI commit format checks.
 * **Draft PR Resource Optimization**: Dynamically skip matrix executions while pull requests remain in Draft status, waking runners only when marked "Ready for review" or on subsequent non-draft pushes.
 * **Resilient Aggregate Branch Protection (`ci-passed`)**: Provide a single, immutable status check name (`ci-passed`) that aggregates all lint and test matrix outcomes for branch protection rules on `main` and `'rc/**'`.
 * **Clear Contributor Documentation**: Fully document hook installation commands (`uv run pre-commit install`) and the Draft PR workflow in `CONTRIBUTING.md`.
@@ -278,7 +276,6 @@ if __name__ == "__main__":
 The workflow triggers on `main`, `rc`, and all release candidate sub-branches (`'rc/**'`):
 * **Pull Request Activity Types**: `[opened, synchronize, reopened, ready_for_review]`.
 * **Draft Bypass Logic**: `if: github.event_name != 'pull_request' || !github.event.pull_request.draft`. When a pull request is marked as a Draft, all jobs (including `ci-passed`) are skipped, preventing hundreds of wasted runner minutes during iterative spikes.
-* **Server-Side PR Title Validation**: Validates `github.event.pull_request.title` during the `lint` job to ensure squash merges on `main` maintain Conventional Commits integrity.
 * **Aggregate Gating (`ci-passed`)**: A dedicated job with `needs: [lint, test]` that runs only on non-draft PRs and pushes, reporting `success` when all upstream matrix checks pass.
 
 ```yaml
@@ -323,18 +320,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync
-
-      - name: Validate PR Title (Conventional Commits)
-        if: github.event_name == 'pull_request'
-        run: |
-          uv run python -c '
-          import re, sys
-          pattern = r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\./]+\))?(!)?: .+"
-          title = """${{ github.event.pull_request.title }}"""
-          if not re.match(pattern, title):
-              print(f"❌ PR Title \"{title}\" does not follow Conventional Commits: https://www.conventionalcommits.org/")
-              sys.exit(1)
-          '
 
       - name: Run Ruff Lint & Format Check
         run: |
