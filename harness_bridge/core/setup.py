@@ -80,8 +80,8 @@ async def setup_claude(
     if force:
         await run_command_safe(["claude", "mcp", "remove", "harness-bridge"], timeout=10.0)
 
-    # Register via claude mcp add harness-bridge -- <executable> serve
-    cmd = ["claude", "mcp", "add", "harness-bridge", "--", executable, "serve"]
+    # Register via claude mcp add -s user harness-bridge -- <executable> serve
+    cmd = ["claude", "mcp", "add", "-s", "user", "harness-bridge", "--", executable, "serve"]
     code, stdout, stderr = await run_command_safe(cmd, timeout=15.0)
     output_combined = f"{stdout}\n{stderr}".lower()
     if "already exists" in output_combined or check_claude_configured_fast():
