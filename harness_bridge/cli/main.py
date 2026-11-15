@@ -35,8 +35,8 @@ err_console = Console(stderr=True)
 
 @app.callback()
 def main_callback(ctx: typer.Context) -> None:
-    """Pre-run hook: check for updates passively if not running 'serve' (to keep MCP stdout clean)."""
-    if ctx.invoked_subcommand != "serve":
+    """Pre-run hook: check for updates passively for commands that produce rich interactive output."""
+    if ctx.invoked_subcommand not in ("serve", "version", None):
         try:
             asyncio.run(maybe_notify_update())
         except Exception:

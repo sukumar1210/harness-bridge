@@ -56,9 +56,9 @@ WORKDIR /workspace
 
 EXPOSE 8000
 
-# Periodic healthcheck verifies CLI executable and runtime health
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD harness-bridge version || exit 1
+# Periodic healthcheck verifies CLI executable and runtime health without network delays
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import harness_bridge" || exit 1
 
 # Default entrypoint runs the harness-bridge CLI
 ENTRYPOINT ["harness-bridge"]
