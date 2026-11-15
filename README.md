@@ -1,6 +1,7 @@
 # Harness Bridge
 
 [![CI](https://github.com/sukumar1210/harness-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/sukumar1210/harness-bridge/actions/workflows/ci.yml)
+[![M8ven Score](https://m8ven.ai/badge/mcp/sukumar1210-harness-bridge-13ucsb?v=449a4b4b3cc5a5d32267b3606532aa27)](https://m8ven.ai/mcp/sukumar1210-harness-bridge-13ucsb?s=readme)
 [![Discussions](https://img.shields.io/badge/Discussions-Join%20Roadmap%20Poll-purple.svg)](https://github.com/sukumar1210/harness-bridge/discussions/16)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
