@@ -362,6 +362,7 @@ Presets are resolved using a 3-tier fallback strategy (discovering both `*.yaml`
         "warning": "Calling session uses claude-3-5-haiku, but preset recommends claude-3-7-sonnet for orchestrator role."
       }
       ```
+    * **Lead Session Identity & Presence Alerts**: The orchestrator session (`orchestrator_session_id`) is formally registered as the room's lead session. When worker roles or auxiliary peer sessions join the run's aggregated coordination room, Harness Bridge emits an automated `presence_join` notification into the orchestrator's unread inbox, guaranteeing that the lead session has immediate visibility into newly connected agents.
   * **Standalone Engine Mode (CLI)**: When launched via terminal (`harness-bridge team run`), the engine operates standalone. The deterministic `TeamStateEngine` evaluates DAG dependencies and dispatches worker roles directly without requiring an ambient LLM orchestrator session unless the preset defines specific DAG steps for the orchestrator role.
 * **Dynamic Event-Driven Step Concurrency**:
   * In DAG topologies with independent branches of unequal duration, monolithic `asyncio.gather` barriers cause head-of-line blocking (e.g. a fast 5s branch being blocked from unblocking downstream steps by a slow 60s sibling branch).

@@ -100,8 +100,21 @@ Every agent session connecting to an aggregated room receives an immutable compo
 * **Session**: UUID or named session string
 * **Validation**: Collocation requirements check `peer_a.device_id == peer_b.device_id`.
 
-#### 3. Workspace Boundary Enforcer (`WorkspacePolicy`)
+#### 3. Workspace Boundary Enforcer (`WorkspacePolicy`) & Lead Session Ownership
 When an agent invokes `bridge_join_session(aggregated_session_id, working_directory)`, the enforcer validates admittance against the room's policy:
+* **Room Creation & Lead Session Identity**:
+  1. The session initiating the room is designated as the `lead_session_id`.
+  2. Room metadata records `lead_session_id`, `primary_root`, and creation timestamp.
+  3. **Automated Join Notification**: Whenever a new session successfully joins the room, a synthetic `presence_join` event message is automatically dispatched to the `lead_session_id`'s inbox and published to the Gateway SSE stream (`/api/v1/sessions/{id}/events`):
+     ```json
+     {
+       "message_type": "presence_join",
+       "sender": "system",
+       "recipient": "<lead_session_id>",
+       "content": "SESSION_JOINED: Session 'devbox/claude/task-worker-1' joined room 'dev-room-42'."
+     }
+     ```
+     This guarantees the lead session is immediately aware of all joining peers without requiring polling.
 * **`strict_single_project` (Default)**:
   1. Room records the root repository canonical path upon creation.
   2. Admitted sessions MUST match the room's `device_id`.
@@ -113,8 +126,16 @@ When an agent invokes `bridge_join_session(aggregated_session_id, working_direct
   3. Enables controlled cross-repository communication without arbitrary filesystem leakage.
 
 #### 4. Peer Message Bus & Inboxes (`PeerMessageBus`)
+* **Strict Join-Before-Send Enforcement (`RoomMembershipGuard`)**:
+  * An agent session **must be an active registered member** of `aggregated_session_id` before sending any direct or broadcast messages to that room.
+  * Dispatches via `bridge_send_peer_message` or `bridge_broadcast_message` from non-member sessions are strictly rejected with `RoomMembershipRequiredError`.
+* **Multi-Room Concurrency & Context Partitioning**:
+  * An individual session can participate in multiple aggregated rooms simultaneously.
+  * The `aggregated_session_id` serves as the primary routing and keying identifier.
+  * Ingestion via `bridge_get_messages` requires `aggregated_session_id` to prevent cross-room message contamination.
+  * During turn context injection, pending messages are partitioned per-room (`[INTER-AGENT MESSAGES: Room <id>]`), ensuring prompt context never bleeds across unrelated rooms.
 * **Message Delivery**:
-  * Direct Message (`bridge_send_peer_message`): Appends a structured `PeerMessage` to the target peer's FIFO inbox.
+  * Direct Message (`bridge_send_peer_message`): Appends a structured `PeerMessage` to the target peer's FIFO inbox within the room.
   * Broadcast Message (`bridge_broadcast_message`): Appends the message to all active peer inboxes within the aggregated session except the sender.
 * **Message Schema**:
   ```python
@@ -123,14 +144,16 @@ When an agent invokes `bridge_join_session(aggregated_session_id, working_direct
       aggregated_session_id: str
       sender: str  # <device_id>/<harness>/<session_id>
       recipient: str | None  # None for broadcast
-      message_type: Literal["text", "task_handover", "artifact", "control"]
+      message_type: Literal[
+          "text", "task_handover", "artifact", "control", "presence_join", "presence_leave"
+      ]
       content: str
       metadata: dict[str, Any] = Field(default_factory=dict)
       timestamp: float
   ```
 * **Message Ingestion During Headless Turns**:
-  * Agents query unread messages using `bridge_get_messages`.
-  * For dispatched turns coordinated through `SessionManager`, pending messages are automatically prepended as high-priority system context blocks into the subsequent prompt invocation.
+  * Agents query unread messages using `bridge_get_messages(aggregated_session_id)`.
+  * For dispatched turns coordinated through `SessionManager`, pending messages for the target room are automatically prepended as high-priority system context blocks into the subsequent prompt invocation.
 
 #### 5. Remote Gateway & Duplex Transport (`RemoteGatewayServer`)
 * **Transport Protocol**: Exposes dual transport over HTTP/HTTPS:
@@ -184,9 +207,9 @@ This section enumerates every file that will be created, modified, or updated to
 * **Changes**: Add new Pydantic models:
   * `WorkspacePolicyMode = Literal["strict_single_project", "multi_project_allowlist", "open"]`
   * `PeerAddress(device_id: str, harness: str, session_id: str)`
-  * `PeerMessage(message_id: str, aggregated_session_id: str, sender: str, recipient: str | None, message_type: str, content: str, timestamp: float)`
-  * `AggregatedSessionInfo(aggregated_session_id: str, primary_root: str, policy: WorkspacePolicyMode, allowed_paths: list[str], members: dict[str, PeerAddress], created_at: float)`
-* **Rationale**: Establishes strict data structures for message transport, peer addressing, and room state tracking.
+  * `PeerMessage(message_id: str, aggregated_session_id: str, sender: str, recipient: str | None, message_type: Literal["text", "task_handover", "artifact", "control", "presence_join", "presence_leave"], content: str, timestamp: float)`
+  * `AggregatedSessionInfo(aggregated_session_id: str, lead_session_id: str, primary_root: str, policy: WorkspacePolicyMode, allowed_paths: list[str], members: dict[str, PeerAddress], created_at: float)`
+* **Rationale**: Establishes strict data structures for message transport, peer addressing, lead session ownership, and room state tracking.
 
 #### 2. Device Fingerprinting: `harness_bridge/core/device.py` (New File)
 * **Changes**: Implement `get_device_id() -> str`:
@@ -198,6 +221,7 @@ This section enumerates every file that will be created, modified, or updated to
 #### 3. Domain Exceptions: `harness_bridge/core/exceptions.py`
 * **Changes**: Add:
   * `WorkspacePolicyViolationError`: Raised when an agent attempts to join a session from an unauthorized directory or different device.
+  * `RoomMembershipRequiredError`: Raised when a session attempts to send a direct or broadcast message to a room without first joining as a verified member.
   * `PeerNotFoundError`: Raised when dispatching a direct message to a nonexistent or disconnected peer.
   * `AggregatedSessionNotFoundError`: Raised on operations against invalid room IDs.
   * `GatewayAuthError`: Raised when remote clients fail Bearer token authentication.
