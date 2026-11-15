@@ -33,17 +33,11 @@ RUN groupadd -g 1000 bridge && \
 
 WORKDIR /app
 
-# Copy dependency definition files first for efficient Docker layer caching
-COPY pyproject.toml uv.lock ./
-
-# Install python dependencies in the system environment
-RUN uv pip install --system --no-cache -e .
-
-# Copy application source
+# Copy project metadata, dependencies, and application source
+COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY harness_bridge ./harness_bridge
-COPY README.md LICENSE ./
 
-# Re-install package in system python to register CLI scripts
+# Install harness-bridge and all dependencies into system environment
 RUN uv pip install --system --no-cache -e .
 
 # Configure workspace and storage directory

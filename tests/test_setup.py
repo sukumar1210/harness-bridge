@@ -50,6 +50,18 @@ async def test_setup_claude_mocked():
                 res = await setup_claude(force=False)
                 assert res.status == "configured"
 
+        # Test Docker mode registration
+        with patch("harness_bridge.core.setup.check_claude_configured_fast", return_value=False):
+            with patch(
+                "harness_bridge.core.setup.run_command_safe", new_callable=AsyncMock
+            ) as mock_run:
+                mock_run.return_value = (0, "Added docker harness-bridge", "")
+                res = await setup_claude(use_docker=True)
+                assert res.status == "configured"
+                call_args = mock_run.call_args[0][0]
+                assert "docker" in call_args
+                assert "serve" in call_args
+
 
 @pytest.mark.asyncio
 async def test_setup_agy_mocked():
@@ -69,3 +81,15 @@ async def test_setup_agy_mocked():
                 mock_run.return_value = (0, "Added mcp server", "")
                 res = await setup_agy(force=False)
                 assert res.status == "configured"
+
+        # Test Docker mode registration
+        with patch("harness_bridge.core.setup.check_agy_configured_fast", return_value=False):
+            with patch(
+                "harness_bridge.core.setup.run_command_safe", new_callable=AsyncMock
+            ) as mock_run:
+                mock_run.return_value = (0, "Added docker agy server", "")
+                res = await setup_agy(use_docker=True)
+                assert res.status == "configured"
+                call_args = mock_run.call_args[0][0]
+                assert "docker" in call_args
+                assert "serve" in call_args
