@@ -76,11 +76,25 @@ class AntigravityDriver(BaseDriver):
             if resume_id:
                 cmd.extend(["--conversation", resume_id])
 
+        # Ensure no interactive Antigravity session variables leak into child agy
+        clean_env = dict(env)
+        for var in (
+            "ANTIGRAVITY_CONVERSATION_ID",
+            "ANTIGRAVITY_LS_ADDRESS",
+            "ANTIGRAVITY_CSRF_TOKEN",
+            "ANTIGRAVITY_TRAJECTORY_ID",
+            "ANTIGRAVITY_PROJECT_ID",
+            "ANTIGRAVITY_AGENT",
+            "ANTIGRAVITY_SOURCE_METADATA",
+            "ANTIGRAVITY_AGENTAPI_EXE",
+        ):
+            clean_env.pop(var, None)
+
         start_time = time.perf_counter()
         exit_code, stdout, stderr = await run_command_safe(
             cmd,
             cwd=cwd,
-            env=env,
+            env=clean_env,
             timeout=float(task.timeout_seconds),
             log_path=log_path,
             pid_callback=pid_callback,

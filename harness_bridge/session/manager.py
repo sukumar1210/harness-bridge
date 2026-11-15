@@ -34,7 +34,14 @@ class SessionManager:
                 Path(base) / "sessions" if base else Path.home() / ".harness-bridge" / "sessions"
             )
 
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            import tempfile
+
+            fallback = Path(tempfile.gettempdir()) / "harness-bridge" / "sessions"
+            fallback.mkdir(parents=True, exist_ok=True)
+            self.storage_dir = fallback
         self.sessions: dict[str, SessionInfo] = {}
         self._session_locks: dict[str, asyncio.Lock] = {}
 
@@ -149,7 +156,22 @@ class SessionManager:
             self._save_session(session)
 
             # Prepare execution environment with distributed trace propagation
+            # Strip interactive session variables to prevent child harnesses from hijacking
+            # or crashing active caller sessions (e.g. interactive agy or claude sessions).
             env = dict(os.environ)
+            for var in (
+                "ANTIGRAVITY_CONVERSATION_ID",
+                "ANTIGRAVITY_LS_ADDRESS",
+                "ANTIGRAVITY_CSRF_TOKEN",
+                "ANTIGRAVITY_TRAJECTORY_ID",
+                "ANTIGRAVITY_PROJECT_ID",
+                "ANTIGRAVITY_AGENT",
+                "ANTIGRAVITY_SOURCE_METADATA",
+                "CLAUDE_SESSION_ID",
+                "CLAUDE_CONVERSATION_ID",
+            ):
+                env.pop(var, None)
+
             env["HARNESS_BRIDGE_TRACE_ID"] = session_id
             env["HARNESS_BRIDGE_HOP_COUNT"] = str(hop_count + 1)
 

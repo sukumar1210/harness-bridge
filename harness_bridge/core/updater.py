@@ -114,7 +114,10 @@ async def check_for_updates(
         (has_update, current_version, latest_version, wheel_url)
     """
     now = time.time()
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
     if not force and CACHE_FILE.exists():
         try:

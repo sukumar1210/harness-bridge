@@ -77,11 +77,23 @@ class ClaudeCodeDriver(BaseDriver):
             if resume_id:
                 cmd.extend(["--resume", resume_id])
 
+        # Ensure interactive session variables do not bleed into child claude
+        clean_env = dict(env)
+        for var in (
+            "CLAUDE_SESSION_ID",
+            "CLAUDE_CONVERSATION_ID",
+            "ANTIGRAVITY_CONVERSATION_ID",
+            "ANTIGRAVITY_LS_ADDRESS",
+            "ANTIGRAVITY_CSRF_TOKEN",
+            "ANTIGRAVITY_AGENT",
+        ):
+            clean_env.pop(var, None)
+
         start_time = time.perf_counter()
         exit_code, stdout, stderr = await run_command_safe(
             cmd,
             cwd=cwd,
-            env=env,
+            env=clean_env,
             timeout=float(task.timeout_seconds),
             log_path=log_path,
             pid_callback=pid_callback,

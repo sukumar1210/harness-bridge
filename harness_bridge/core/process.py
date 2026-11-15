@@ -129,7 +129,7 @@ async def run_command_safe(
         kwargs["env"] = env
 
     if sys.platform != "win32":
-        kwargs["process_group"] = 0
+        kwargs["start_new_session"] = True
 
     proc = await asyncio.create_subprocess_exec(*args, **kwargs)
 

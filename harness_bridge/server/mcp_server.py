@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 from rich.console import Console
 
 from harness_bridge import __version__
@@ -34,14 +35,28 @@ mcp_app = MCPServer(
 _session_manager = SessionManager()
 
 
-@mcp_app.tool()
+@mcp_app.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
 async def bridge_list_harnesses() -> list[dict[str, Any]]:
     """List all registered agent harnesses, their binary names, and installation status on system PATH."""
     infos = list_all_harness_info()
     return [info.model_dump() for info in infos]
 
 
-@mcp_app.tool()
+@mcp_app.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=True,
+    )
+)
 async def bridge_dispatch_task(
     harness: str,
     prompt: str,
@@ -66,6 +81,7 @@ async def bridge_dispatch_task(
     """
     mode: WorkspaceMode = "worktree" if workspace_mode == "worktree" else "inherit"
     resolved_session_id = session_id or str(uuid.uuid4())
+
     spec = TaskSpec(
         harness=harness,
         prompt=prompt,
@@ -107,7 +123,14 @@ async def bridge_dispatch_task(
     return result.model_dump()
 
 
-@mcp_app.tool()
+@mcp_app.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
 async def bridge_cancel_session(session_id: str) -> dict[str, Any]:
     """Cancel an active or running task session and terminate its subprocess group.
 
@@ -118,7 +141,14 @@ async def bridge_cancel_session(session_id: str) -> dict[str, Any]:
     return {"session_id": session_id, "cancelled": cancelled}
 
 
-@mcp_app.tool()
+@mcp_app.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=False,
+    )
+)
 async def bridge_apply_diff(
     session_id: str,
     repo_root: str | None = None,
@@ -135,7 +165,14 @@ async def bridge_apply_diff(
     return result.model_dump()
 
 
-@mcp_app.tool()
+@mcp_app.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
 async def bridge_get_session(session_id: str) -> dict[str, Any]:
     """Retrieve tracking details, output, diff, and token usage for an active or past session.
 
@@ -167,7 +204,14 @@ async def bridge_get_session(session_id: str) -> dict[str, Any]:
     return data
 
 
-@mcp_app.tool()
+@mcp_app.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+)
 async def bridge_close_session(
     session_id: str,
     repo_root: str | None = None,
