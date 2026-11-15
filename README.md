@@ -48,7 +48,28 @@
 
 ## Quick Start & Installation
 
-### Option 1: One-Line Installer (Recommended)
+### Option 1: Docker (Go-To & Primary Recommendation)
+
+Run Harness Bridge containerized for 100% environment parity between local development and production with zero host dependency pollution:
+
+```bash
+# Build the Docker image locally
+docker build -t harness-bridge:latest .
+
+# Run as background service with SSE MCP transport (port 8000)
+docker compose up -d
+
+# Or run in interactive stdio mode with your workspace mounted
+docker run -i --rm -v $(pwd):/workspace harness-bridge:latest serve
+
+# Automatically configure your host harnesses (Claude, Antigravity) to use Docker
+harness-bridge setup --docker
+```
+> See the complete [Docker Guide (Local & Production)](docs/docker.md) for Kubernetes, cloud container deployments, and Claude Desktop MCP configurations.
+
+---
+
+### Option 2: Native Host Installation
 
 #### Linux / macOS:
 ```bash
@@ -60,23 +81,6 @@ curl -fsSL https://raw.githubusercontent.com/sukumar1210/harness-bridge/main/scr
 irm https://raw.githubusercontent.com/sukumar1210/harness-bridge/main/scripts/install.ps1 | iex
 ```
 
----
-
-### Option 2: Docker Container (Local & Production)
-
-Run the containerized Harness Bridge anywhere without local dependency installation:
-
-```bash
-# Build the Docker image locally
-docker build -t harness-bridge:latest .
-
-# Run as background service with SSE MCP transport (ports 8000)
-docker compose up -d
-
-# Or run interactively in stdio mode with your workspace mounted
-docker run -i --rm -v $(pwd):/workspace harness-bridge:latest serve
-```
-See the complete [Docker Guide (Local & Production)](docs/docker.md) for Kubernetes, cloud container deployments, and Claude Desktop MCP configurations.
 
 ---
 
@@ -103,13 +107,22 @@ harness-bridge setup
 ## Connecting to Agent Harnesses
 
 ### One-Shot Automatic Setup (Recommended)
-Auto-detect all installed coding harnesses on your system PATH (`claude`, `agy`) and register Harness Bridge as an MCP server with a single command:
+Auto-detect all installed coding harnesses on your system PATH (`claude`, `agy`) and register Harness Bridge as an MCP server with a single command.
+
+#### Docker Runtime (Go-To / Recommended):
+Automatically configures all harnesses to invoke the containerized Harness Bridge image:
+```bash
+harness-bridge setup --docker
+```
+
+#### Native Host Runtime:
+Configures harnesses to call the locally installed executable:
 ```bash
 harness-bridge setup
 ```
 Use `--force` to re-register or update existing configurations:
 ```bash
-harness-bridge setup --force
+harness-bridge setup --docker --force
 ```
 
 ---

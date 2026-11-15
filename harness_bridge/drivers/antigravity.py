@@ -90,6 +90,34 @@ class AntigravityDriver(BaseDriver):
         ):
             clean_env.pop(var, None)
 
+        # Ephemeral session sandbox: isolate SQLite DBs and transcripts from host ~/.gemini
+        if task.session_id:
+            import tempfile
+
+            sandbox_dir = (
+                Path(tempfile.gettempdir())
+                / "harness-bridge"
+                / "sandboxes"
+                / task.session_id
+                / "antigravity-cli"
+            )
+            try:
+                sandbox_dir.mkdir(parents=True, exist_ok=True)
+                # Selective credential bridge: link/copy installation_id if host has one
+                host_app_dir = Path.home() / ".gemini" / "antigravity-cli"
+                host_install_id = host_app_dir / "installation_id"
+                sandbox_install_id = sandbox_dir / "installation_id"
+                if host_install_id.exists() and not sandbox_install_id.exists():
+                    try:
+                        sandbox_install_id.write_text(
+                            host_install_id.read_text(encoding="utf-8"), encoding="utf-8"
+                        )
+                    except Exception:
+                        pass
+                clean_env["ANTIGRAVITY_APP_DATA_DIR"] = str(sandbox_dir)
+            except Exception:
+                pass
+
         start_time = time.perf_counter()
         exit_code, stdout, stderr = await run_command_safe(
             cmd,

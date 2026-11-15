@@ -244,14 +244,33 @@ def setup_command(
     force: bool = typer.Option(
         False, "--force", "-f", help="Force re-registration even if already configured."
     ),
+    docker: bool = typer.Option(
+        False,
+        "--docker",
+        "-d",
+        help="Register Harness Bridge using the Docker container runtime rather than local host executable.",
+    ),
+    docker_image: str = typer.Option(
+        "harness-bridge:latest",
+        "--image",
+        help="Docker image tag to register when using --docker (default: harness-bridge:latest).",
+    ),
 ) -> None:
     """One-shot setup: auto-detect all installed agent harnesses and register Harness Bridge as an MCP server."""
     from harness_bridge.core.setup import setup_all_harnesses
 
+    mode_label = f"Docker container ({docker_image})" if docker else "local host executable"
     console.print(
-        "[bold cyan]Running one-shot setup for installed AI agent harnesses...[/bold cyan]"
+        f"[bold cyan]Running one-shot setup for installed AI agent harnesses using {mode_label}...[/bold cyan]"
     )
-    results = asyncio.run(setup_all_harnesses(executable=executable, force=force))
+    results = asyncio.run(
+        setup_all_harnesses(
+            executable=executable,
+            force=force,
+            use_docker=docker,
+            docker_image=docker_image,
+        )
+    )
 
     table = Table(title="Harness MCP Setup Status", header_style="bold cyan")
     table.add_column("Harness", style="bold")

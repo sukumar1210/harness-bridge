@@ -246,6 +246,14 @@ class SessionManager:
 
         self.sessions.pop(session_id, None)
 
+        # Clean up ephemeral session sandbox if present
+        import shutil
+        import tempfile
+
+        sandbox_root = Path(tempfile.gettempdir()) / "harness-bridge" / "sandboxes" / session_id
+        if sandbox_root.exists():
+            shutil.rmtree(sandbox_root, ignore_errors=True)
+
         if cleanup_worktree and session.worktree_path and repo_root:
             await self.workspace_manager.cleanup_workspace(
                 session_id=session_id,

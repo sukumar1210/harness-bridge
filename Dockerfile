@@ -52,10 +52,19 @@ ENV HARNESS_BRIDGE_STORAGE_DIR=/home/bridge/.harness-bridge/sessions \
     PORT=8000 \
     HOST=0.0.0.0
 
+LABEL org.opencontainers.image.title="Harness Bridge" \
+      org.opencontainers.image.description="Lightweight inter-agent proxy and Model Context Protocol (MCP) server" \
+      org.opencontainers.image.source="https://github.com/sukumar1210/harness-bridge" \
+      org.opencontainers.image.licenses="MIT"
+
 USER bridge
 WORKDIR /workspace
 
 EXPOSE 8000
+
+# Periodic healthcheck verifies CLI executable and runtime health
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD harness-bridge version || exit 1
 
 # Default entrypoint runs the harness-bridge CLI
 ENTRYPOINT ["harness-bridge"]

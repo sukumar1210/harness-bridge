@@ -58,6 +58,8 @@ def check_agy_configured_fast() -> bool:
 async def setup_claude(
     executable: str = "harness-bridge",
     force: bool = False,
+    use_docker: bool = False,
+    docker_image: str = "harness-bridge:latest",
 ) -> HarnessSetupResult:
     """Configure Harness Bridge MCP server in Claude Code."""
     binary = shutil.which("claude")
@@ -80,8 +82,29 @@ async def setup_claude(
     if force:
         await run_command_safe(["claude", "mcp", "remove", "harness-bridge"], timeout=10.0)
 
-    # Register via claude mcp add -s user harness-bridge -- <executable> serve
-    cmd = ["claude", "mcp", "add", "-s", "user", "harness-bridge", "--", executable, "serve"]
+    # Register via claude mcp add -s user harness-bridge -- <command>
+    if use_docker:
+        cmd = [
+            "claude",
+            "mcp",
+            "add",
+            "-s",
+            "user",
+            "harness-bridge",
+            "--",
+            "docker",
+            "run",
+            "-i",
+            "--rm",
+            "-v",
+            "${workspaceFolder}:/workspace",
+            "-v",
+            "harness-bridge-data:/home/bridge/.harness-bridge",
+            docker_image,
+            "serve",
+        ]
+    else:
+        cmd = ["claude", "mcp", "add", "-s", "user", "harness-bridge", "--", executable, "serve"]
     code, stdout, stderr = await run_command_safe(cmd, timeout=15.0)
     output_combined = f"{stdout}\n{stderr}".lower()
     if "already exists" in output_combined or check_claude_configured_fast():
@@ -109,6 +132,8 @@ async def setup_claude(
 async def setup_agy(
     executable: str = "harness-bridge",
     force: bool = False,
+    use_docker: bool = False,
+    docker_image: str = "harness-bridge:latest",
 ) -> HarnessSetupResult:
     """Configure Harness Bridge MCP server in Antigravity CLI."""
     binary = shutil.which("agy")
@@ -131,8 +156,26 @@ async def setup_agy(
     if force:
         await run_command_safe(["agy", "mcp", "remove", "harness-bridge"], timeout=10.0)
 
-    # Register via agy mcp add harness-bridge <executable> serve
-    cmd = ["agy", "mcp", "add", "harness-bridge", executable, "serve"]
+    # Register via agy mcp add harness-bridge <command>
+    if use_docker:
+        cmd = [
+            "agy",
+            "mcp",
+            "add",
+            "harness-bridge",
+            "docker",
+            "run",
+            "-i",
+            "--rm",
+            "-v",
+            "${workspaceFolder}:/workspace",
+            "-v",
+            "harness-bridge-data:/home/bridge/.harness-bridge",
+            docker_image,
+            "serve",
+        ]
+    else:
+        cmd = ["agy", "mcp", "add", "harness-bridge", executable, "serve"]
     code, stdout, stderr = await run_command_safe(cmd, timeout=15.0)
     if code == 0 or check_agy_configured_fast():
         return HarnessSetupResult(
@@ -152,6 +195,8 @@ async def setup_agy(
 async def setup_all_harnesses(
     executable: str | None = None,
     force: bool = False,
+    use_docker: bool = False,
+    docker_image: str = "harness-bridge:latest",
 ) -> list[HarnessSetupResult]:
     """Auto-detect all installed harnesses and register Harness Bridge MCP server in each."""
     target_exec = executable or shutil.which("harness-bridge") or "harness-bridge"
@@ -162,11 +207,21 @@ async def setup_all_harnesses(
     harnesses = {h.name: h for h in list_all_harness_info()}
 
     if "claude" in harnesses:
-        claude_res = await setup_claude(executable=target_exec, force=force)
+        claude_res = await setup_claude(
+            executable=target_exec,
+            force=force,
+            use_docker=use_docker,
+            docker_image=docker_image,
+        )
         results.append(claude_res)
 
     if "agy" in harnesses:
-        agy_res = await setup_agy(executable=target_exec, force=force)
+        agy_res = await setup_agy(
+            executable=target_exec,
+            force=force,
+            use_docker=use_docker,
+            docker_image=docker_image,
+        )
         results.append(agy_res)
 
     return results

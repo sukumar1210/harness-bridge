@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import shutil
+import tempfile
 from pathlib import Path
 
 from harness_bridge.core.exceptions import WorkspaceError
@@ -58,15 +60,33 @@ class WorkspaceManager:
         return worktree_path
 
     async def extract_diff(self, worktree_path: Path, base_ref: str = "HEAD") -> str:
-        """Extract unified git diff including untracked files."""
+        """Extract unified git diff including untracked files using an isolated throwaway index."""
         worktree_path = worktree_path.resolve()
-        # Stage untracked files intent-to-add so they appear in diff
-        await run_command_safe(["git", "add", "-N", "."], cwd=worktree_path)
 
-        code, stdout, stderr = await run_command_safe(["git", "diff", base_ref], cwd=worktree_path)
-        if code != 0:
-            return ""
-        return stdout
+        # Compute standard diff against base_ref
+        code, stdout, _ = await run_command_safe(["git", "diff", base_ref], cwd=worktree_path)
+        diff_text = stdout if code == 0 else ""
+
+        # Safely capture untracked files using an ephemeral temporary index file
+        # so the real checkout index is never mutated or marked dirty.
+        try:
+            with tempfile.NamedTemporaryFile(prefix="hb_diff_idx_") as tmp_idx:
+                env = dict(os.environ)
+                env["GIT_INDEX_FILE"] = tmp_idx.name
+                await run_command_safe(["git", "read-tree", base_ref], cwd=worktree_path, env=env)
+                code_add, _, _ = await run_command_safe(
+                    ["git", "add", "-N", "."], cwd=worktree_path, env=env
+                )
+                if code_add == 0:
+                    code_diff, full_diff, _ = await run_command_safe(
+                        ["git", "diff", base_ref], cwd=worktree_path, env=env
+                    )
+                    if code_diff == 0 and full_diff.strip():
+                        return full_diff
+        except Exception:
+            pass
+
+        return diff_text
 
     async def apply_diff(self, repo_root: Path, session_id: str) -> ApplyResult:
         """Merge or apply changes produced in the session worktree branch into repo_root."""
