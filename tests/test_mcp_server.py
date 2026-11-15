@@ -103,3 +103,26 @@ async def test_mcp_dispatch_and_cancel():
     with patch.object(_session_manager, "cancel_session", return_value=True):
         cancel_res = await bridge_cancel_session("test-disp-1")
         assert cancel_res["cancelled"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_server_transports():
+    """Verify run_server dispatches to appropriate transport."""
+    from unittest.mock import AsyncMock
+
+    from harness_bridge.server.mcp_server import mcp_app, run_server
+
+    with patch.object(mcp_app, "run_stdio_async", new_callable=AsyncMock) as mock_stdio:
+        await run_server(transport="stdio")
+        assert mock_stdio.called
+
+    with patch.object(mcp_app, "run_sse_async", new_callable=AsyncMock) as mock_sse:
+        await run_server(transport="sse", host="0.0.0.0", port=8000)
+        assert mock_sse.called
+
+    with patch.object(mcp_app, "run_streamable_http_async", new_callable=AsyncMock) as mock_http:
+        await run_server(transport="http", host="0.0.0.0", port=8000)
+        assert mock_http.called
+
+    with pytest.raises(ValueError, match="Unsupported MCP transport"):
+        await run_server(transport="unknown_transport")

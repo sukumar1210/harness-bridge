@@ -1,0 +1,25 @@
+services:
+  harness-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: harness-bridge:latest
+    container_name: harness-bridge
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - HARNESS_BRIDGE_STORAGE_DIR=/home/bridge/.harness-bridge/sessions
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      # Mount current repository for agent inspection and worktree sandboxing
+      - .:/workspace
+      # Persist session journals across container restarts
+      - harness-bridge-data:/home/bridge/.harness-bridge
+    command: ["serve", "--transport", "sse", "--host", "0.0.0.0", "--port", "8000"]
+
+volumes:
+  harness-bridge-data:

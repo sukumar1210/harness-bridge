@@ -231,7 +231,39 @@ async def bridge_close_session(
     return {"session_id": session_id, "closed": closed}
 
 
-async def run_server() -> None:
-    """Run the MCP server over standard I/O (stdio)."""
-    logger.info("Starting Harness Bridge MCP stdio server v%s", __version__)
-    await mcp_app.run_stdio_async()
+async def run_server(
+    transport: str = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8000,
+) -> None:
+    """Run the Model Context Protocol (MCP) server.
+
+    Args:
+        transport: MCP transport mechanism ('stdio', 'sse', or 'http').
+        host: Host IP to bind for network transports (default: '127.0.0.1').
+        port: Port to bind for network transports (default: 8000).
+    """
+    clean_transport = transport.lower().strip()
+    if clean_transport == "stdio":
+        logger.info("Starting Harness Bridge MCP stdio server v%s", __version__)
+        await mcp_app.run_stdio_async()
+    elif clean_transport == "sse":
+        logger.info(
+            "Starting Harness Bridge MCP SSE server v%s on http://%s:%d/sse",
+            __version__,
+            host,
+            port,
+        )
+        await mcp_app.run_sse_async(host=host, port=port)
+    elif clean_transport in ("http", "streamable-http"):
+        logger.info(
+            "Starting Harness Bridge MCP Streamable HTTP server v%s on http://%s:%d/mcp",
+            __version__,
+            host,
+            port,
+        )
+        await mcp_app.run_streamable_http_async(host=host, port=port)
+    else:
+        raise ValueError(
+            f"Unsupported MCP transport '{transport}'. Supported transports are: 'stdio', 'sse', 'http'."
+        )

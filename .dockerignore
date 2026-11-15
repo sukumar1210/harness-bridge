@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Python virtual environment and caches
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+dist
+build
+*.egg-info
+
+# Agent & harness state
+.claude
+.gemini
+.harness-bridge
+.worktrees
+node_modules
+npm-debug.log
+
+# Scratch and intermediate artifacts
+scratch
+*.tmp
+*.log

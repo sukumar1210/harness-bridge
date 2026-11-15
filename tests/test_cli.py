@@ -97,3 +97,25 @@ def test_cli_test_command():
     result = runner.invoke(app, ["test"])
     assert result.exit_code == 0
     assert "Diagnostics" in result.stdout
+
+
+def test_cli_serve_transports():
+    """Verify serve command passes transport, host, and port."""
+    with patch("harness_bridge.cli.main.run_server", new_callable=AsyncMock) as mock_run:
+        result = runner.invoke(app, ["serve"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="stdio", host="0.0.0.0", port=8000)
+
+    with patch("harness_bridge.cli.main.run_server", new_callable=AsyncMock) as mock_run:
+        result = runner.invoke(
+            app, ["serve", "--transport", "sse", "--host", "127.0.0.1", "--port", "9000"]
+        )
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="sse", host="127.0.0.1", port=9000)
+
+    with patch(
+        "harness_bridge.cli.main.run_server", side_effect=ValueError("Unsupported transport")
+    ):
+        result = runner.invoke(app, ["serve", "--transport", "invalid"])
+        assert result.exit_code == 1
+        assert "Unsupported transport" in result.output

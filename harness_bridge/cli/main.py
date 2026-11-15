@@ -44,12 +44,34 @@ def main_callback(ctx: typer.Context) -> None:
 
 
 @app.command(name="serve")
-def serve_command() -> None:
-    """Start the Model Context Protocol (MCP) server over standard I/O (stdio)."""
+def serve_command(
+    transport: str = typer.Option(
+        "stdio",
+        "--transport",
+        "-t",
+        help="MCP transport protocol: 'stdio', 'sse', or 'http' (default: stdio).",
+    ),
+    host: str = typer.Option(
+        "0.0.0.0",
+        "--host",
+        "-h",
+        help="Host address to bind for network transports (default: 0.0.0.0).",
+    ),
+    port: int = typer.Option(
+        8000,
+        "--port",
+        "-p",
+        help="Port to bind for network transports (default: 8000).",
+    ),
+) -> None:
+    """Start the Model Context Protocol (MCP) server."""
     try:
-        asyncio.run(run_server())
+        asyncio.run(run_server(transport=transport, host=host, port=port))
     except KeyboardInterrupt:
         err_console.print("[yellow]MCP server stopped by user.[/yellow]")
+    except ValueError as e:
+        err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1) from e
 
 
 @app.command(name="list")

@@ -62,7 +62,25 @@ irm https://raw.githubusercontent.com/sukumar1210/harness-bridge/main/scripts/in
 
 ---
 
-### Option 2: Using `uv` or `pip`
+### Option 2: Docker Container (Local & Production)
+
+Run the containerized Harness Bridge anywhere without local dependency installation:
+
+```bash
+# Build the Docker image locally
+docker build -t harness-bridge:latest .
+
+# Run as background service with SSE MCP transport (ports 8000)
+docker compose up -d
+
+# Or run interactively in stdio mode with your workspace mounted
+docker run -i --rm -v $(pwd):/workspace harness-bridge:latest serve
+```
+See the complete [Docker Guide (Local & Production)](docs/docker.md) for Kubernetes, cloud container deployments, and Claude Desktop MCP configurations.
+
+---
+
+### Option 3: Using `uv` or `pip`
 ```bash
 # Clone the repository
 git clone https://github.com/sukumar1210/harness-bridge.git
