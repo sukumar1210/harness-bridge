@@ -125,7 +125,59 @@ When an agent invokes `bridge_join_session(aggregated_session_id, working_direct
   2. Admitted sessions must have `working_directory` equal to or inside one of the allowlisted paths.
   3. Enables controlled cross-repository communication without arbitrary filesystem leakage.
 
-#### 4. Peer Message Bus & Inboxes (`PeerMessageBus`)
+#### 4. Data-Layer Security & Relational Schema (Database-Level Enforcement)
+Authorization and room containment are enforced **at the database engine layer** (via SQLite WAL with `PRAGMA foreign_keys = ON;` locally, or PostgreSQL in hosted environments), rather than relying solely on brittle application-level `if/else` checks:
+
+```sql
+CREATE TABLE aggregated_rooms (
+    room_id TEXT PRIMARY KEY,
+    lead_session_id TEXT NOT NULL,
+    coordinator_session_id TEXT, -- Co-located with lead, assigned to an independent agent, or NULL
+    workspace_policy TEXT NOT NULL DEFAULT 'strict_single_project',
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE room_members (
+    room_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'peer', -- 'peer', 'coordinator', 'observer'
+    joined_at REAL NOT NULL,
+    PRIMARY KEY (room_id, session_id),
+    FOREIGN KEY (room_id) REFERENCES aggregated_rooms(room_id) ON DELETE CASCADE
+);
+
+CREATE TABLE room_messages (
+    message_id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    sender_session_id TEXT NOT NULL,
+    recipient_session_id TEXT, -- NULL for room-wide broadcast
+    message_type TEXT NOT NULL, -- text, task_handover, artifact, control, presence_join, presence_leave
+    content TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    -- Hard database constraint: An unadmitted session CANNOT insert a message into a room
+    FOREIGN KEY (room_id, sender_session_id) 
+        REFERENCES room_members(room_id, session_id) ON DELETE CASCADE
+);
+```
+
+* **Zero-Bypass Mechanical Barrier**: With foreign key enforcement active, an unadmitted session attempting to write to `room_messages` immediately triggers a database engine abort (`FOREIGN KEY constraint failed`), rendering application-level bypasses impossible.
+
+#### 5. Cross-Tenant Symmetric Peer Federation & Decoupled Coordinator Role
+* **Symmetric (Equal-Hierarchy) Collaboration**:
+  * When two independent users or tenants (e.g. User A in `tenant_alice` and User B in `tenant_bob`) connect their respective agent sessions (e.g. Claude Code and Antigravity) into a shared room, neither session is hierarchically subordinate to the other.
+  * Both sessions register in `room_members` with `role = 'peer'`.
+  * Neither peer possesses unilateral cancellation or force-killing authority over the other; conversation proceeds symmetrically as equal peers over the verified room message bus.
+  * Cross-tenant privacy is preserved: filesystem and credential boundaries remain strictly localized to each participant's host node; only messages explicitly inserted into `room_messages` cross the bridge.
+* **Decoupled Coordinator Role**:
+  * A room may optionally assign a `coordinator_session_id` to manage turn taking, consensus detection (`[CONSENSUS_REACHED]`), or human checkpoint gating.
+  * **Assignment Flexibility**:
+    1. *Co-located on Lead Session*: By default, the initiating lead session can also adopt the coordinator role (`coordinator_session_id = lead_session_id`).
+    2. *Independent Neutral Coordinator*: An auxiliary neutral session (e.g., an automated synthesizer or auditor) can be designated coordinator without altering the peer equality of the conversing agents.
+    3. *Autonomous Peer-to-Peer*: In purely bilateral collaborative debates, `coordinator_session_id` is set to `NULL`, allowing unconstrained turn exchanges.
+
+#### 6. Peer Message Bus & Inboxes (`PeerMessageBus`)
 * **Strict Join-Before-Send Enforcement (`RoomMembershipGuard`)**:
   * An agent session **must be an active registered member** of `aggregated_session_id` before sending any direct or broadcast messages to that room.
   * Dispatches via `bridge_send_peer_message` or `bridge_broadcast_message` from non-member sessions are strictly rejected with `RoomMembershipRequiredError`.
@@ -155,7 +207,7 @@ When an agent invokes `bridge_join_session(aggregated_session_id, working_direct
   * Agents query unread messages using `bridge_get_messages(aggregated_session_id)`.
   * For dispatched turns coordinated through `SessionManager`, pending messages for the target room are automatically prepended as high-priority system context blocks into the subsequent prompt invocation.
 
-#### 5. Remote Gateway & Duplex Transport (`RemoteGatewayServer`)
+#### 7. Remote Gateway & Duplex Transport (`RemoteGatewayServer`)
 * **Transport Protocol**: Exposes dual transport over HTTP/HTTPS:
   * **SSE Stream (`GET /api/v1/sessions/{id}/events`)**: Push session events, agent outputs, and peer messages in real time.
   * **Command Endpoint (`POST /api/v1/sessions/{id}/commands`)**: Send duplex control instructions, prompts, or messages to specific sessions.
@@ -208,7 +260,7 @@ This section enumerates every file that will be created, modified, or updated to
   * `WorkspacePolicyMode = Literal["strict_single_project", "multi_project_allowlist", "open"]`
   * `PeerAddress(device_id: str, harness: str, session_id: str)`
   * `PeerMessage(message_id: str, aggregated_session_id: str, sender: str, recipient: str | None, message_type: Literal["text", "task_handover", "artifact", "control", "presence_join", "presence_leave"], content: str, timestamp: float)`
-  * `AggregatedSessionInfo(aggregated_session_id: str, lead_session_id: str, primary_root: str, policy: WorkspacePolicyMode, allowed_paths: list[str], members: dict[str, PeerAddress], created_at: float)`
+  * `AggregatedSessionInfo(aggregated_session_id: str, lead_session_id: str, coordinator_session_id: str | None, primary_root: str, policy: WorkspacePolicyMode, allowed_paths: list[str], members: dict[str, PeerAddress], created_at: float)`
 * **Rationale**: Establishes strict data structures for message transport, peer addressing, lead session ownership, and room state tracking.
 
 #### 2. Device Fingerprinting: `harness_bridge/core/device.py` (New File)
