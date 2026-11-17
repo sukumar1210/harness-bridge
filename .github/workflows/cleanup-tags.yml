@@ -28,19 +28,29 @@ jobs:
           fi
           echo "Successfully authenticated with Docker Hub API."
 
+          echo "Listing all tags on Docker Hub..."
+          TAGS_JSON=$(curl -s -H "Authorization: JWT $TOKEN" \
+            "https://hub.docker.com/v2/repositories/$DOCKERHUB_USERNAME/harness-bridge/tags/?page_size=25")
+          echo "$TAGS_JSON" | jq -r '.results[]?.name'
+
           for tag in "0.0" "0.0.1" "main"; do
             echo "Attempting to delete tag '$tag'..."
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
               -H "Authorization: JWT $TOKEN" \
-              "https://hub.docker.com/v2/repositories/$DOCKERHUB_USERNAME/harness-bridge/tags/$tag/")
+              "https://hub.docker.com/v2/repositories/$DOCKERHUB_USERNAME/harness-bridge/tags/$tag")
+            if [ "$STATUS" = "404" ]; then
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+                -H "Authorization: JWT $TOKEN" \
+                "https://hub.docker.com/v2/namespaces/$DOCKERHUB_USERNAME/repositories/harness-bridge/tags/$tag")
+            fi
             echo "Status for '$tag': $STATUS"
             if [ "$STATUS" = "204" ] || [ "$STATUS" = "200" ]; then
               echo "✓ Successfully deleted '$tag'."
             elif [ "$STATUS" = "404" ]; then
-              echo "Tag '$tag' does not exist or was already deleted."
+              echo "Tag '$tag' not found on Docker Hub."
             elif [ "$STATUS" = "403" ]; then
-              echo "⚠ 403 Forbidden: Docker Hub token does not have Delete permissions (Read/Write only)."
+              echo "⚠ 403 Forbidden: Docker Hub token does not have Delete permissions."
             else
-              echo "Unexpected status code $STATUS when deleting '$tag'."
+              echo "Status code: $STATUS"
             fi
           done
