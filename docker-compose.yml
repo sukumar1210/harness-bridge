@@ -19,7 +19,7 @@ services:
       - .:/workspace
       # Persist session journals across container restarts
       - harness-bridge-data:/home/bridge/.harness-bridge
-    command: ["serve", "--transport", "sse", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["serve", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]
 
 volumes:
   harness-bridge-data:

@@ -6,50 +6,39 @@ Harness Bridge provides a unified Docker container designed to run seamlessly bo
 
 ## 1. Quick Start
 
-### Build the Image
+### Run via Docker Hub (No Source Code Needed)
 ```bash
-docker build -t harness-bridge:latest .
+docker run -d \
+  --name harness-bridge \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  -v "$PWD":/workspace \
+  -v harness-bridge-data:/home/bridge/.harness-bridge \
+  sukumar1210/harness-bridge:latest
 ```
 
-### Run CLI Commands
+### Build from Source
 ```bash
-# Check version
-docker run --rm harness-bridge:latest version
-
-# List supported harnesses in the container
-docker run --rm harness-bridge:latest list
+docker build -t harness-bridge:latest .
 ```
 
 ---
 
 ## 2. Local Developer Workflows
 
-### Mode A: Stdio MCP Mode (Claude Desktop, Cursor, Windsurf)
-In stdio mode, your local MCP client communicates directly with the containerized Harness Bridge over stdin/stdout.
-
-Add to your MCP configuration (e.g. `claude_desktop_config.json` or `~/.claude.json`):
-```json
-{
-  "mcpServers": {
-    "harness-bridge": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v", "${workspaceFolder}:/workspace",
-        "-v", "harness-bridge-sessions:/home/bridge/.harness-bridge",
-        "-e", "ANTHROPIC_API_KEY",
-        "harness-bridge:latest",
-        "serve",
-        "--transport", "stdio"
-      ]
-    }
-  }
-}
+### Automated One-Shot Setup (Zero Python Required)
+Run the automated Docker setup script:
+```bash
+./install.sh --docker
 ```
+This single command:
+1. Starts the `harness-bridge` background container via `docker compose up -d`.
+2. Automatically registers the SSE endpoint (`http://localhost:8000/sse`) in Claude Code and Antigravity.
+3. Requires zero Python dependencies or virtual environments on your host.
 
-### Mode B: Network Mode with Docker Compose (SSE / HTTP)
+---
+
+### Manual Setup via Docker Compose (Recommended)
 Run Harness Bridge as a long-running background service using Docker Compose:
 
 ```bash
@@ -61,7 +50,16 @@ The container exposes:
 - **Messages Endpoint**: `http://localhost:8000/messages/`
 - **Streamable HTTP Endpoint**: `http://localhost:8000/mcp`
 
-Configure your MCP client to connect via Server-Sent Events (SSE):
+Register the SSE endpoint in your installed harnesses:
+```bash
+# Claude Code
+claude mcp add --transport sse -s user harness-bridge http://localhost:8000/sse
+
+# Antigravity CLI
+agy mcp add harness-bridge http://localhost:8000/sse
+```
+
+Or configure manually in `~/.claude.json` / `~/.gemini/config/mcp_config.json`:
 ```json
 {
   "mcpServers": {
@@ -71,6 +69,9 @@ Configure your MCP client to connect via Server-Sent Events (SSE):
   }
 }
 ```
+
+> [!NOTE]
+> All local sessions and subagents multiplex through this single shared daemon container. Unlike ephemeral stdio execution, this guarantees that subagents, concurrent turns, and session resumes never spawn zombie container instances.
 
 ---
 

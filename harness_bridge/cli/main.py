@@ -49,7 +49,7 @@ def serve_command(
         "stdio",
         "--transport",
         "-t",
-        help="MCP transport protocol: 'stdio', 'sse', or 'http' (default: stdio).",
+        help="MCP transport protocol: 'stdio', 'sse', 'http', or 'unified' (default: stdio).",
     ),
     host: str = typer.Option(
         "0.0.0.0",

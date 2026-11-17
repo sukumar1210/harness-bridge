@@ -56,10 +56,10 @@ WORKDIR /workspace
 
 EXPOSE 8000
 
-# Periodic healthcheck verifies CLI executable and runtime health without network delays
+# Periodic healthcheck verifies MCP server health and responsiveness on SSE endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import harness_bridge" || exit 1
+    CMD curl -fsS http://localhost:8000/sse || python3 -c "import harness_bridge" || exit 1
 
 # Default entrypoint runs the harness-bridge CLI
 ENTRYPOINT ["harness-bridge"]
-CMD ["serve", "--transport", "stdio"]
+CMD ["serve", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]

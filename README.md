@@ -48,82 +48,87 @@
 
 ## Quick Start & Installation
 
-### Option 1: Docker (Go-To & Primary Recommendation)
+### One-Shot Installer (Recommended)
 
-Run Harness Bridge containerized for 100% environment parity between local development and production with zero host dependency pollution:
+Bootstrap Harness Bridge in a single command. The installer automatically detects your environment, offers a choice between **Docker** and **Local CLI**, and registers the MCP server in your installed coding harnesses (Claude Code, Antigravity):
 
+#### Linux & macOS:
 ```bash
-# Build the Docker image locally
-docker build -t harness-bridge:latest .
-
-# Run as background service with SSE MCP transport (port 8000)
-docker compose up -d
-
-# Or run in interactive stdio mode with your workspace mounted
-docker run -i --rm -v $(pwd):/workspace harness-bridge:latest serve
-
-# Automatically configure your host harnesses (Claude, Antigravity) to use Docker
-harness-bridge setup --docker
-```
-> See the complete [Docker Guide (Local & Production)](docs/docker.md) for Kubernetes, cloud container deployments, and Claude Desktop MCP configurations.
-
----
-
-### Option 2: Native Host Installation
-
-#### Linux / macOS:
-```bash
-curl -fsSL https://raw.githubusercontent.com/sukumar1210/harness-bridge/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sukumar1210/harness-bridge/main/install.sh | bash
 ```
 
 #### Windows (PowerShell):
 ```powershell
-irm https://raw.githubusercontent.com/sukumar1210/harness-bridge/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/sukumar1210/harness-bridge/main/install.ps1 | iex
 ```
 
+*In interactive terminals, the installer prompts between Docker (Recommended) and Local installation. In automated or CI/CD environments, it auto-detects the runtime (or accepts `--docker` / `--local` / `-y` flags).*
 
 ---
 
-### Option 3: Using `uv` or `pip`
+### Manual Installation Options
+
+If you prefer installing manually without running scripts:
+
+#### Option 1: Docker (Persistent Daemon)
+Pull and run the pre-built multi-architecture container from Docker Hub:
 ```bash
-# Clone the repository
+docker run -d \
+  --name harness-bridge \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  -v "$PWD":/workspace \
+  -v harness-bridge-data:/home/bridge/.harness-bridge \
+  sukumar1210/harness-bridge:latest
+
+# Connect your agent harnesses
+claude mcp add --transport sse -s user harness-bridge http://localhost:8000/sse
+agy mcp add harness-bridge http://localhost:8000/sse
+```
+> See the [Docker Guide](docs/docker.md) for custom port mappings, Docker Compose, and production deployment options.
+
+#### Option 2: Local Host CLI (`pip` / `venv`)
+Install the CLI into your user environment:
+```bash
+# Install via pip
+pip install harness-bridge
+
+# Register into Claude Code and Antigravity (uses on-demand stdio)
+harness-bridge setup
+```
+
+#### Option 3: From Source (`uv`)
+Clone the repository for local development:
+```bash
 git clone https://github.com/sukumar1210/harness-bridge.git
 cd harness-bridge
-
-# Install editable with dev dependencies
 uv sync
+
+# Register local editable build
+uv run harness-bridge setup
 ```
 
 ---
 
-### Next Step: One-Shot Auto-Setup
-Once installed, automatically register Harness Bridge with all detected harnesses on your system:
+### Re-running Setup
+If you reinstall Claude Code, update your Antigravity configuration, or switch between Docker and local runtimes, re-run setup at any time to repair harness registrations:
 ```bash
+./setup.sh
+# or on Windows:
+.\setup.ps1
+# or via CLI:
 harness-bridge setup
 ```
 
 ---
 
-## Connecting to Agent Harnesses
-
-### One-Shot Automatic Setup (Recommended)
-Auto-detect all installed coding harnesses on your system PATH (`claude`, `agy`) and register Harness Bridge as an MCP server with a single command.
-
-#### Docker Runtime (Go-To / Recommended):
-Automatically configures all harnesses to invoke the containerized Harness Bridge image:
-```bash
-harness-bridge setup --docker
-```
-
-#### Native Host Runtime:
-Configures harnesses to call the locally installed executable:
-```bash
-harness-bridge setup
-```
-Use `--force` to re-register or update existing configurations:
-```bash
-harness-bridge setup --docker --force
-```
+### Multi-Device & Network Access
+By default, local CLI installations run on-demand via standard MCP `stdio` (zero open ports, zero idle RAM). If you want other devices across your local network (LAN) to connect to Harness Bridge:
+* **Via Docker**: Run the container with `-p 8000:8000` (exposed by default in Docker mode). Other devices on the LAN can connect to `http://<HOST-IP>:8000/sse`.
+* **Via Local Host CLI**: Launch the server explicitly in network mode:
+  ```bash
+  harness-bridge serve --transport unified --host 0.0.0.0 --port 8000
+  ```
 
 ---
 

@@ -263,7 +263,42 @@ async def run_server(
             port,
         )
         await mcp_app.run_streamable_http_async(host=host, port=port)
+    elif clean_transport in ("unified", "network"):
+        import uvicorn
+        from starlette.applications import Starlette
+        from starlette.routing import Route
+
+        logger.info(
+            "Starting Harness Bridge Unified MCP server v%s on http://%s:%d (SSE: /sse, HTTP: /mcp & /sse)",
+            __version__,
+            host,
+            port,
+        )
+        sse_app = mcp_app.sse_app()
+        http_app = mcp_app._lowlevel_server.streamable_http_app(
+            streamable_http_path="/mcp", host=host
+        )
+        http_endpoint = http_app.routes[0].endpoint
+
+        routes = [
+            Route("/sse", endpoint=sse_app.routes[0].endpoint, methods=["GET", "HEAD"]),
+            Route("/sse", endpoint=http_endpoint, methods=["POST"]),
+            Route("/mcp", endpoint=http_endpoint),
+            sse_app.routes[1],  # Mount('/messages')
+        ]
+        unified_app = Starlette(
+            routes=routes,
+            lifespan=http_app.router.lifespan_context,
+        )
+        config = uvicorn.Config(
+            unified_app,
+            host=host,
+            port=port,
+            log_level=mcp_app.settings.log_level.lower(),
+        )
+        server = uvicorn.Server(config)
+        await server.serve()
     else:
         raise ValueError(
-            f"Unsupported MCP transport '{transport}'. Supported transports are: 'stdio', 'sse', 'http'."
+            f"Unsupported MCP transport '{transport}'. Supported transports are: 'stdio', 'sse', 'http', 'unified'."
         )

@@ -20,34 +20,7 @@ class HarnessSetupResult:
     message: str
 
 
-def build_docker_run_args(docker_image: str = "harness-bridge:latest") -> list[str]:
-    """Generate the docker run arguments for MCP server registration."""
-    home_dir = str(Path.home())
-    cwd_dir = str(Path.cwd().resolve())
-
-    mounts: list[str] = [
-        "-v",
-        f"{home_dir}:{home_dir}",
-    ]
-    if Path("/srv").exists():
-        mounts.extend(["-v", "/srv:/srv"])
-    if cwd_dir != home_dir and not cwd_dir.startswith(home_dir) and not cwd_dir.startswith("/srv"):
-        mounts.extend(["-v", f"{cwd_dir}:{cwd_dir}"])
-    mounts.extend(["-v", f"{cwd_dir}:/workspace"])
-    mounts.extend(["-v", "harness-bridge-data:/home/bridge/.harness-bridge"])
-
-    return [
-        "docker",
-        "run",
-        "-i",
-        "--rm",
-        *mounts,
-        docker_image,
-        "serve",
-    ]
-
-
-def check_claude_configured_fast(for_docker: bool = False) -> bool:
+def check_claude_configured_fast(for_docker: bool = False, port: int = 8000) -> bool:
     """Fast check whether harness-bridge is registered in Claude Code configuration."""
     for claude_path in [
         Path.cwd() / ".mcp.json",
@@ -60,15 +33,15 @@ def check_claude_configured_fast(for_docker: bool = False) -> bool:
                 cfg = mcp_servers.get("harness-bridge")
                 if cfg:
                     if for_docker:
-                        cmd = cfg.get("command", "") if isinstance(cfg, dict) else ""
-                        return cmd == "docker"
+                        url = cfg.get("url", "") if isinstance(cfg, dict) else ""
+                        return f":{port}/sse" in url or cfg.get("type") == "sse"
                     return True
             except Exception:
                 pass
     return False
 
 
-def check_agy_configured_fast(for_docker: bool = False) -> bool:
+def check_agy_configured_fast(for_docker: bool = False, port: int = 8000) -> bool:
     """Fast check whether harness-bridge is registered in Antigravity mcp_config.json."""
     for config_path in [
         Path.home() / ".gemini" / "config" / "mcp_config.json",
@@ -82,8 +55,8 @@ def check_agy_configured_fast(for_docker: bool = False) -> bool:
                 cfg = mcp_servers.get("harness-bridge")
                 if cfg:
                     if for_docker:
-                        cmd = cfg.get("command", "") if isinstance(cfg, dict) else ""
-                        return cmd == "docker"
+                        url = cfg.get("url", "") if isinstance(cfg, dict) else ""
+                        return f":{port}/sse" in url
                     return True
             except Exception:
                 pass
@@ -95,6 +68,7 @@ async def setup_claude(
     force: bool = False,
     use_docker: bool = False,
     docker_image: str = "harness-bridge:latest",
+    port: int = 8000,
 ) -> HarnessSetupResult:
     """Configure Harness Bridge MCP server in Claude Code."""
     binary = shutil.which("claude")
@@ -106,7 +80,7 @@ async def setup_claude(
             message="Claude Code binary ('claude') not found on PATH.",
         )
 
-    if not force and check_claude_configured_fast(for_docker=use_docker):
+    if not force and check_claude_configured_fast(for_docker=use_docker, port=port):
         return HarnessSetupResult(
             harness="claude",
             binary="claude",
@@ -117,10 +91,20 @@ async def setup_claude(
     # Remove existing registration before adding new one
     await run_command_safe(["claude", "mcp", "remove", "harness-bridge"], timeout=10.0)
 
-    # Register via claude mcp add -s user harness-bridge -- <command>
+    # Register via claude mcp add
     if use_docker:
-        docker_cmd = build_docker_run_args(docker_image=docker_image)
-        cmd = ["claude", "mcp", "add", "-s", "user", "harness-bridge", "--", *docker_cmd]
+        sse_url = f"http://localhost:{port}/sse"
+        cmd = [
+            "claude",
+            "mcp",
+            "add",
+            "--transport",
+            "sse",
+            "-s",
+            "user",
+            "harness-bridge",
+            sse_url,
+        ]
     else:
         cmd = ["claude", "mcp", "add", "-s", "user", "harness-bridge", "--", executable, "serve"]
     code, stdout, stderr = await run_command_safe(cmd, timeout=15.0)
@@ -144,12 +128,9 @@ async def setup_claude(
         if "mcpServers" not in cfg_data:
             cfg_data["mcpServers"] = {}
         if use_docker:
-            docker_cmd = build_docker_run_args(docker_image=docker_image)
             cfg_data["mcpServers"]["harness-bridge"] = {
-                "type": "stdio",
-                "command": docker_cmd[0],
-                "args": docker_cmd[1:],
-                "env": {},
+                "type": "sse",
+                "url": f"http://localhost:{port}/sse",
             }
         else:
             cfg_data["mcpServers"]["harness-bridge"] = {
@@ -181,6 +162,7 @@ async def setup_agy(
     force: bool = False,
     use_docker: bool = False,
     docker_image: str = "harness-bridge:latest",
+    port: int = 8000,
 ) -> HarnessSetupResult:
     """Configure Harness Bridge MCP server in Antigravity CLI."""
     binary = shutil.which("agy")
@@ -192,7 +174,7 @@ async def setup_agy(
             message="Antigravity CLI binary ('agy') not found on PATH.",
         )
 
-    if not force and check_agy_configured_fast(for_docker=use_docker):
+    if not force and check_agy_configured_fast(for_docker=use_docker, port=port):
         return HarnessSetupResult(
             harness="agy",
             binary="agy",
@@ -203,10 +185,10 @@ async def setup_agy(
     # Remove existing registration before adding new one
     await run_command_safe(["agy", "mcp", "remove", "harness-bridge"], timeout=10.0)
 
-    # Register via agy mcp add harness-bridge -- <command>
+    # Register via agy mcp add
     if use_docker:
-        docker_cmd = build_docker_run_args(docker_image=docker_image)
-        cmd = ["agy", "mcp", "add", "harness-bridge", "--", *docker_cmd]
+        sse_url = f"http://localhost:{port}/sse"
+        cmd = ["agy", "mcp", "add", "harness-bridge", sse_url]
     else:
         cmd = ["agy", "mcp", "add", "harness-bridge", executable, "serve"]
     code, stdout, stderr = await run_command_safe(cmd, timeout=15.0)
@@ -228,10 +210,8 @@ async def setup_agy(
         if "mcpServers" not in cfg_data:
             cfg_data["mcpServers"] = {}
         if use_docker:
-            docker_cmd = build_docker_run_args(docker_image=docker_image)
             cfg_data["mcpServers"]["harness-bridge"] = {
-                "command": docker_cmd[0],
-                "args": docker_cmd[1:],
+                "url": f"http://localhost:{port}/sse",
             }
         else:
             cfg_data["mcpServers"]["harness-bridge"] = {
@@ -261,6 +241,7 @@ async def setup_all_harnesses(
     force: bool = False,
     use_docker: bool = False,
     docker_image: str = "harness-bridge:latest",
+    port: int = 8000,
 ) -> list[HarnessSetupResult]:
     """Auto-detect all installed harnesses and register Harness Bridge MCP server in each."""
     target_exec = executable or shutil.which("harness-bridge") or "harness-bridge"
@@ -276,6 +257,7 @@ async def setup_all_harnesses(
             force=force,
             use_docker=use_docker,
             docker_image=docker_image,
+            port=port,
         )
         results.append(claude_res)
 
@@ -285,6 +267,7 @@ async def setup_all_harnesses(
             force=force,
             use_docker=use_docker,
             docker_image=docker_image,
+            port=port,
         )
         results.append(agy_res)
 
