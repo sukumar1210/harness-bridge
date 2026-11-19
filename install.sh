@@ -84,8 +84,10 @@ fi
 # ------------------------------------------------------------------------------
 # Interactive / Headless Detection
 # ------------------------------------------------------------------------------
+# When piped (curl | bash), stdin (fd 0) is the curl pipe, NOT a tty.
+# We check if stdout (fd 1) is a tty AND /dev/tty can be opened for reading.
 IS_TTY=false
-if [ -t 0 ] && [ -r /dev/tty ]; then
+if [ -t 1 ] && (: < /dev/tty) 2>/dev/null; then
     IS_TTY=true
 fi
 
