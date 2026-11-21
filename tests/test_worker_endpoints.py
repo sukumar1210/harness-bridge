@@ -142,6 +142,8 @@ async def test_task_fail_endpoint(app_and_bus):
 
 def test_cli_worker_help():
     """Verify worker CLI subcommand help and option parsing."""
+    import re
+
     from typer.testing import CliRunner
 
     from harness_bridge.cli.main import app
@@ -149,7 +151,8 @@ def test_cli_worker_help():
     runner = CliRunner()
     result = runner.invoke(app, ["worker", "--help"])
     assert result.exit_code == 0
-    assert "--server" in result.stdout
-    assert "--token" in result.stdout
-    assert "--harness" in result.stdout
-    assert "--worker-id" in result.stdout
+    clean_stdout = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", result.stdout)
+    assert "--server" in clean_stdout
+    assert "--token" in clean_stdout
+    assert "--harness" in clean_stdout
+    assert "--worker-id" in clean_stdout
