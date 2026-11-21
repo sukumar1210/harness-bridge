@@ -33,9 +33,11 @@ RUN groupadd -g 1000 bridge && \
 
 WORKDIR /app
 
-# Copy project metadata, dependencies, and application source
+# Copy project metadata, dependencies, application source, and entrypoint
 COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY harness_bridge ./harness_bridge
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Install harness-bridge and all dependencies into system environment
 RUN uv pip install --system --no-cache -e .
@@ -60,6 +62,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -fsS http://localhost:8000/sse || python3 -c "import harness_bridge" || exit 1
 
-# Default entrypoint runs the harness-bridge CLI
-ENTRYPOINT ["harness-bridge"]
+# Default entrypoint runs smart auto-discovery entrypoint
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["serve", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]

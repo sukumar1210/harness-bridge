@@ -63,15 +63,79 @@ def serve_command(
         "-p",
         help="Port to bind for network transports (default: 8000).",
     ),
+    embedded_worker: bool = typer.Option(
+        True,
+        "--embedded-worker/--no-embedded-worker",
+        help="Auto-spawn in-process embedded worker for locally installed harnesses (default: True).",
+    ),
 ) -> None:
     """Start the Model Context Protocol (MCP) server."""
     try:
-        asyncio.run(run_server(transport=transport, host=host, port=port))
+        if not embedded_worker:
+            asyncio.run(
+                run_server(transport=transport, host=host, port=port, enable_embedded_worker=False)
+            )
+        else:
+            asyncio.run(run_server(transport=transport, host=host, port=port))
     except KeyboardInterrupt:
         err_console.print("[yellow]MCP server stopped by user.[/yellow]")
     except ValueError as e:
         err_console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1) from e
+
+
+@app.command(name="worker")
+def worker_command(
+    server: str = typer.Option(
+        "http://localhost:8000",
+        "--server",
+        "-s",
+        help="Target Harness Bridge server URL (e.g. 'http://localhost:8000').",
+    ),
+    token: Optional[str] = typer.Option(
+        None,
+        "--token",
+        envvar="HARNESS_BRIDGE_TOKEN",
+        help="Authentication bearer token (or set HARNESS_BRIDGE_TOKEN env var).",
+    ),
+    harnesses: Optional[str] = typer.Option(
+        None,
+        "--harness",
+        "-H",
+        help="Comma-separated harness types to advertise (default: auto-detect installed harnesses).",
+    ),
+    worker_id: Optional[str] = typer.Option(
+        None,
+        "--worker-id",
+        help="Custom worker identity string (default: auto-generated from hostname and pid).",
+    ),
+) -> None:
+    """Run a decoupled worker daemon connecting outward to a central Harness Bridge server."""
+    from harness_bridge.worker.daemon import WorkerDaemon
+
+    harness_list = [h.strip() for h in harnesses.split(",") if h.strip()] if harnesses else None
+    daemon = WorkerDaemon(
+        server_url=server,
+        token=token,
+        harnesses=harness_list,
+        worker_id=worker_id,
+    )
+    console.print(
+        Panel.fit(
+            f"[bold green]Starting Harness Bridge Worker Daemon[/bold green]\n"
+            f"[cyan]Server URL:[/cyan] {server}\n"
+            f"[cyan]Worker ID:[/cyan] {daemon.worker_id}\n"
+            f"[cyan]Advertised Harnesses:[/cyan] {', '.join(daemon.harnesses) or '[red]None installed[/red]'}\n"
+            f"[dim]Press Ctrl+C to terminate.[/dim]",
+            title="Harness Bridge Worker",
+            border_style="green",
+        )
+    )
+    try:
+        asyncio.run(daemon.run())
+    except KeyboardInterrupt:
+        daemon.stop()
+        err_console.print("[yellow]Worker daemon stopped by user.[/yellow]")
 
 
 @app.command(name="list")

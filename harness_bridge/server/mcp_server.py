@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import sys
 import time
 import uuid
@@ -11,10 +13,20 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 from rich.console import Console
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response, StreamingResponse
+from starlette.routing import Route
 
 from harness_bridge import __version__
-from harness_bridge.core.types import SessionInfo, TaskSpec, WorkspaceMode
-from harness_bridge.drivers.registry import list_all_harness_info
+from harness_bridge.core.types import (
+    SessionInfo,
+    TaskResult,
+    TaskSpec,
+    WorkspaceMode,
+)
+from harness_bridge.drivers.registry import get_driver, list_all_harness_info
+from harness_bridge.relay.bus import RelayBus
+from harness_bridge.relay.embedded import EmbeddedWorker
 from harness_bridge.session.manager import SessionManager
 
 # Ensure logging strictly uses sys.stderr to avoid polluting JSON-RPC transport on stdout
@@ -33,6 +45,136 @@ mcp_app = MCPServer(
 )
 
 _session_manager = SessionManager()
+_relay_bus = RelayBus()
+_embedded_worker: EmbeddedWorker | None = None
+
+
+def is_harness_installed(harness: str) -> bool:
+    """Check if the harness executable exists on PATH."""
+    try:
+        driver = get_driver(harness)
+        return driver.resolve_binary() is not None
+    except Exception:
+        return False
+
+
+def verify_token(request: Request) -> bool:
+    """Verify bearer token if HARNESS_BRIDGE_TOKEN is configured in environment."""
+    expected = os.environ.get("HARNESS_BRIDGE_TOKEN")
+    if not expected:
+        return True
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:].strip() == expected
+    return request.query_params.get("token") == expected
+
+
+def create_worker_routes(relay_bus: RelayBus) -> list[Route]:
+    """Create Starlette routes for worker SSE subscription and REST task execution lifecycle."""
+
+    async def worker_events_endpoint(request: Request) -> Response:
+        if not verify_token(request):
+            return JSONResponse(
+                {"error": "Unauthorized: invalid HARNESS_BRIDGE_TOKEN"}, status_code=401
+            )
+
+        worker_id = request.query_params.get("worker_id") or f"worker-{uuid.uuid4().hex[:8]}"
+        harnesses_raw = request.query_params.get("harnesses", "")
+        harnesses = [h.strip() for h in harnesses_raw.split(",") if h.strip()]
+        device_name = request.query_params.get("device")
+
+        async def sse_stream():
+            try:
+                async for event in relay_bus.subscribe_worker(
+                    worker_id=worker_id,
+                    harnesses=harnesses,
+                    device_name=device_name,
+                ):
+                    event_type = event.get("event", "message")
+                    if event_type == "ping":
+                        yield b": ping\n\n"
+                    else:
+                        data_json = json.dumps(event)
+                        yield f"event: {event_type}\ndata: {data_json}\n\n".encode("utf-8")
+            except asyncio.CancelledError:
+                pass
+
+        return StreamingResponse(
+            sse_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    async def list_workers_endpoint(request: Request) -> Response:
+        if not verify_token(request):
+            return JSONResponse(
+                {"error": "Unauthorized: invalid HARNESS_BRIDGE_TOKEN"}, status_code=401
+            )
+        workers = relay_bus.store.list_active_workers()
+        return JSONResponse([w.model_dump() for w in workers])
+
+    async def task_ack_endpoint(request: Request) -> Response:
+        if not verify_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        task_id = request.path_params["task_id"]
+        body = await request.json()
+        worker_id = body.get("worker_id", "")
+        ok = relay_bus.ack_task(task_id, worker_id)
+        if ok:
+            return JSONResponse({"ok": True, "task_id": task_id, "worker_id": worker_id})
+        return JSONResponse(
+            {"ok": False, "error": "Task already claimed or expired"}, status_code=409
+        )
+
+    async def task_heartbeat_endpoint(request: Request) -> Response:
+        if not verify_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        task_id = request.path_params["task_id"]
+        body = await request.json()
+        worker_id = body.get("worker_id", "")
+        ok = relay_bus.heartbeat_task(task_id, worker_id)
+        return JSONResponse({"ok": ok, "task_id": task_id})
+
+    async def task_complete_endpoint(request: Request) -> Response:
+        if not verify_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        task_id = request.path_params["task_id"]
+        body = await request.json()
+        worker_id = body.get("worker_id", "")
+        result_data = body.get("result", {})
+        try:
+            result = TaskResult.model_validate(result_data)
+            ok = relay_bus.complete_task(task_id, worker_id, result)
+            return JSONResponse({"ok": ok, "task_id": task_id})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    async def task_fail_endpoint(request: Request) -> Response:
+        if not verify_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        task_id = request.path_params["task_id"]
+        body = await request.json()
+        worker_id = body.get("worker_id", "")
+        error = body.get("error", "Unknown error")
+        ok = relay_bus.fail_task(task_id, worker_id, error)
+        return JSONResponse({"ok": ok, "task_id": task_id})
+
+    return [
+        Route("/api/v1/workers/events", endpoint=worker_events_endpoint, methods=["GET"]),
+        Route("/api/v1/workers", endpoint=list_workers_endpoint, methods=["GET"]),
+        Route("/api/v1/tasks/{task_id}/ack", endpoint=task_ack_endpoint, methods=["POST"]),
+        Route(
+            "/api/v1/tasks/{task_id}/heartbeat", endpoint=task_heartbeat_endpoint, methods=["POST"]
+        ),
+        Route(
+            "/api/v1/tasks/{task_id}/complete", endpoint=task_complete_endpoint, methods=["POST"]
+        ),
+        Route("/api/v1/tasks/{task_id}/fail", endpoint=task_fail_endpoint, methods=["POST"]),
+    ]
 
 
 @mcp_app.tool(
@@ -81,35 +223,44 @@ async def bridge_dispatch_task(
     """
     mode: WorkspaceMode = "worktree" if workspace_mode == "worktree" else "inherit"
     resolved_session_id = session_id or str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
 
     spec = TaskSpec(
         harness=harness,
         prompt=prompt,
         session_id=resolved_session_id,
+        task_id=task_id,
         workspace_mode=mode,
         timeout_seconds=timeout_seconds,
         repo_root=repo_root,
         detach=detach,
     )
 
-    if detach:
-        # Pre-register session in memory and disk immediately with status 'running'
-        init_session = _session_manager.get_session(resolved_session_id)
-        if not init_session:
-            init_session = SessionInfo(
-                session_id=resolved_session_id,
-                harness=harness,
-                workspace_mode=mode,
-                turn_count=1,
-                created_at=time.time(),
-                status="running",
-            )
-            _session_manager.sessions[resolved_session_id] = init_session
-            _session_manager._save_session(init_session)
+    use_relay = _relay_bus.has_active_workers(harness)
 
-        # Launch background task execution
-        asyncio.create_task(_session_manager.execute_task(spec))
+    if detach:
+        if use_relay:
+            await _relay_bus.submit_task(spec)
+        else:
+            # Pre-register session in memory and disk immediately with status 'running'
+            init_session = _session_manager.get_session(resolved_session_id)
+            if not init_session:
+                init_session = SessionInfo(
+                    session_id=resolved_session_id,
+                    harness=harness,
+                    workspace_mode=mode,
+                    turn_count=1,
+                    created_at=time.time(),
+                    status="running",
+                )
+                _session_manager.sessions[resolved_session_id] = init_session
+                _session_manager._save_session(init_session)
+
+            # Launch background task execution
+            asyncio.create_task(_session_manager.execute_task(spec))
+
         return {
+            "task_id": task_id,
             "session_id": resolved_session_id,
             "harness": harness,
             "status": "running",
@@ -119,7 +270,13 @@ async def bridge_dispatch_task(
             "duration_seconds": 0.0,
         }
 
+    if use_relay:
+        await _relay_bus.submit_task(spec)
+        result = await _relay_bus.wait_for_task_completion(task_id, timeout=timeout_seconds)
+        return result.model_dump()
+
     result = await _session_manager.execute_task(spec)
+    result.task_id = task_id
     return result.model_dump()
 
 
@@ -138,6 +295,10 @@ async def bridge_cancel_session(session_id: str) -> dict[str, Any]:
         session_id: Session ID to cancel.
     """
     cancelled = await _session_manager.cancel_session(session_id)
+    latest_task = _relay_bus.store.get_latest_task_for_session(session_id)
+    if latest_task and latest_task.status not in ("completed", "failed"):
+        _relay_bus.cancel_task(latest_task.task_id)
+        cancelled = True
     return {"session_id": session_id, "cancelled": cancelled}
 
 
@@ -179,6 +340,39 @@ async def bridge_get_session(session_id: str) -> dict[str, Any]:
     Args:
         session_id: Session ID to inspect.
     """
+    latest_task = _relay_bus.store.get_latest_task_for_session(session_id)
+    if latest_task:
+        if latest_task.result:
+            data = latest_task.result.model_dump()
+            data["task_id"] = latest_task.task_id
+            return data
+        elif latest_task.status in ("pending", "offered", "assigned", "running"):
+            return {
+                "session_id": session_id,
+                "task_id": latest_task.task_id,
+                "harness": latest_task.harness,
+                "status": "running",
+                "output": f"Task is currently {latest_task.status}.",
+                "diff": None,
+                "exit_code": 0,
+                "duration_seconds": max(0.0, time.time() - latest_task.created_at),
+                "usage": None,
+                "num_turns": None,
+            }
+        elif latest_task.status in ("failed", "timeout", "cancelled"):
+            return {
+                "session_id": session_id,
+                "task_id": latest_task.task_id,
+                "harness": latest_task.harness,
+                "status": latest_task.status,
+                "output": latest_task.error or f"Task ended with status {latest_task.status}",
+                "diff": None,
+                "exit_code": 1,
+                "duration_seconds": max(0.0, latest_task.updated_at - latest_task.created_at),
+                "usage": None,
+                "num_turns": None,
+            }
+
     session = _session_manager.get_session(session_id)
     if not session:
         return {"error": f"Session '{session_id}' not found"}
@@ -235,14 +429,23 @@ async def run_server(
     transport: str = "stdio",
     host: str = "127.0.0.1",
     port: int = 8000,
+    enable_embedded_worker: bool = True,
 ) -> None:
     """Run the Model Context Protocol (MCP) server.
 
     Args:
-        transport: MCP transport mechanism ('stdio', 'sse', or 'http').
+        transport: MCP transport mechanism ('stdio', 'sse', 'http', or 'unified').
         host: Host IP to bind for network transports (default: '127.0.0.1').
         port: Port to bind for network transports (default: 8000).
+        enable_embedded_worker: Auto-spawn in-process embedded worker for local harnesses.
     """
+    global _embedded_worker
+    await _relay_bus.start()
+
+    if enable_embedded_worker:
+        _embedded_worker = EmbeddedWorker(_relay_bus, _session_manager)
+        await _embedded_worker.start()
+
     clean_transport = transport.lower().strip()
     if clean_transport == "stdio":
         logger.info("Starting Harness Bridge MCP stdio server v%s", __version__)
@@ -266,7 +469,6 @@ async def run_server(
     elif clean_transport in ("unified", "network"):
         import uvicorn
         from starlette.applications import Starlette
-        from starlette.routing import Route
 
         logger.info(
             "Starting Harness Bridge Unified MCP server v%s on http://%s:%d (SSE: /sse, HTTP: /mcp & /sse)",
@@ -280,7 +482,9 @@ async def run_server(
         )
         http_endpoint = http_app.routes[0].endpoint
 
-        routes = [
+        worker_routes = create_worker_routes(_relay_bus)
+
+        routes = worker_routes + [
             Route("/sse", endpoint=sse_app.routes[0].endpoint, methods=["GET", "HEAD"]),
             Route("/sse", endpoint=http_endpoint, methods=["POST"]),
             Route("/mcp", endpoint=http_endpoint),
